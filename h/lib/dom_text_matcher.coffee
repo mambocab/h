@@ -1,6 +1,5 @@
 # Text search library
 class window.DomTextMatcher
-  constructor: (@corpus) ->
 
   # Search for text using exact string matching
   #
@@ -14,11 +13,11 @@ class window.DomTextMatcher
   # 
   # For the details about the returned data structure,
   # see the documentation of the search() method.
-  searchExact: (pattern, distinct = true, caseSensitive = false) ->
+  searchExact: (corpus, pattern, distinct = true, caseSensitive = false) ->
     if not @pm then @pm = new window.DTM_ExactMatcher
     @pm.setDistinct(distinct)
     @pm.setCaseSensitive(caseSensitive)
-    @_search @pm, pattern
+    @_search corpus, @pm, pattern
 
   # Search for text using regular expressions
   #
@@ -29,10 +28,10 @@ class window.DomTextMatcher
   # 
   # For the details about the returned data structure,
   # see the documentation of the search() method.
-  searchRegex: (pattern, caseSensitive = false) ->
+  searchRegex: (corpus, pattern, caseSensitive = false) ->
     if not @rm then @rm = new window.DTM_RegexMatcher
     @rm.setCaseSensitive(caseSensitive)
-    @_search @rm, pattern
+    @_search copus, @rm, pattern
 
   # Search for text using fuzzy text matching
   #
@@ -50,14 +49,15 @@ class window.DomTextMatcher
   # 
   # For the details about the returned data structure,
   # see the documentation of the search() method.
-  searchFuzzy: (pattern, pos, caseSensitive = false, options = {}) ->
+  searchFuzzy: (corpus, pattern, pos,
+      caseSensitive = false, options = {}) ->
     @ensureDMP()
     @dmp.setMatchDistance options.matchDistance ? 1000
     @dmp.setMatchThreshold options.matchThreshold ? 0.5
     @dmp.setCaseSensitive caseSensitive
-    @_search @dmp, pattern, pos, options
+    @_search corpus, @dmp, pattern, pos, options
 
-  searchFuzzyWithContext: (prefix, suffix, pattern, expectedStart = null, expectedEnd = null, caseSensitive = false, options = {}) ->
+  searchFuzzyWithContext: (corpus, prefix, suffix, pattern, expectedStart = null, expectedEnd = null, caseSensitive = false, options = {}) ->
     @ensureDMP()
 
     # No context, to joy
@@ -66,7 +66,7 @@ class window.DomTextMatcher
  with missing context!"
 
     # Get full document length
-    len = @corpus().length
+    len = corpus.length
 
     # Get a starting position for the prefix search
     expectedPrefixStart = if expectedStart?
@@ -80,7 +80,7 @@ class window.DomTextMatcher
     # Do the fuzzy search for the prefix
     @dmp.setMatchDistance options.contextMatchDistance ? len * 2
     @dmp.setMatchThreshold options.contextMatchThreshold ? 0.5
-    prefixResult = @dmp.search @corpus(), prefix, expectedPrefixStart
+    prefixResult = @dmp.search corpus, prefix, expectedPrefixStart
 
     # If the prefix is not found, give up
     unless prefixResult.length then return matches: []
@@ -105,7 +105,7 @@ class window.DomTextMatcher
       64
 
     # Get the part of text that is after the prefix
-    remainingText = @corpus().substr prefixEnd
+    remainingText = corpus.substr prefixEnd
 
     # Calculate expected position
     expectedSuffixStart = patternLength
@@ -129,7 +129,7 @@ class window.DomTextMatcher
     matchThreshold = options.patternMatchThreshold ? 0.5
 
     # See how good a match we have
-    analysis = @_analyzeMatch pattern, charRange, true
+    analysis = @_analyzeMatch corpus, pattern, charRange, true
 
     # Should we try to find a better match by moving the
     # initial match around a little bit, even if this has
@@ -141,7 +141,7 @@ class window.DomTextMatcher
       @pm.setDistinct false
       @pm.setCaseSensitive false
 
-      flexMatches = @pm.search @corpus()[prefixStart..suffixEnd], pattern
+      flexMatches = @pm.search corpus[prefixStart ... suffixEnd], pattern
       delete candidate
       bestError = 2
 
@@ -154,12 +154,12 @@ class window.DomTextMatcher
 
         # Check how the prefix would fare
         prefixRange = start: prefixStart, end: flexRange.start
-        a1 = @_analyzeMatch prefix, prefixRange, true
+        a1 = @_analyzeMatch corpus, prefix, prefixRange, true
         prefixError = if a1.exact then 0 else a1.comparison.errorLevel
 
         # Check how the suffix would fare
         suffixRange = start: flexRange.end, end: suffixEnd
-        a2 = @_analyzeMatch suffix, suffixRange, true
+        a2 = @_analyzeMatch corpus, suffix, suffixRange, true
         suffixError = if a2.exact then 0 else a2.comparison.errorLevel
 
         # Did we at least one match?
@@ -176,7 +176,7 @@ class window.DomTextMatcher
       if candidate?
         console.log "flexContext adjustment: we found a better candidate!"
         charRange = candidate
-        analysis = @_analyzeMatch pattern, charRange, true
+        analysis = @_analyzeMatch corpus, pattern, charRange, true
 
     # Do we have to compare what we found to a pattern?
     if (not pattern?) or # "No pattern, nothing to compare. Assume it's OK."
@@ -215,7 +215,7 @@ class window.DomTextMatcher
   # Nodes is the list of matching nodes, with details about the matches.
   # 
   # If no match is found, an empty list is returned.
-  _search: (matcher, pattern, pos, options = {}) ->
+  _search: (corpus, matcher, pattern, pos, options = {}) ->
     # Prepare and check the pattern 
     unless pattern? then throw new Error "Can't search for null pattern!"
     pattern = pattern.trim()
@@ -226,14 +226,14 @@ class window.DomTextMatcher
     t1 = @timestamp()
 
     # Do the text search
-    textMatches = matcher.search @corpus(), pattern, pos, options
+    textMatches = matcher.search corpus, pattern, pos, options
     t2 = @timestamp()
 
     matches = []
     for textMatch in textMatches
       do (textMatch) =>
         # See how good a match we have
-        analysis = @_analyzeMatch pattern, textMatch, fuzzyComparison
+        analysis = @_analyzeMatch corpus, pattern, textMatch, fuzzyComparison
         
         # Collect the results
         match = {}
@@ -255,9 +255,9 @@ class window.DomTextMatcher
   timestamp: -> new Date().getTime()
 
   # Read a match returned by the matcher engine, and compare it with the pattern
-  _analyzeMatch: (pattern, charRange, useFuzzy = false) ->
+  _analyzeMatch: (corpus, pattern, charRange, useFuzzy = false) ->
     expected = @_normalizeString pattern
-    found = @_normalizeString @corpus()[charRange.start .. charRange.end - 1]
+    found = @_normalizeString corpus[ charRange.start ... charRange.end]
     result =
       found: found
       exact: found is expected

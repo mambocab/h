@@ -11,7 +11,29 @@ class Annotator.Guest extends Annotator
   # Plugin configuration
   options:
     TextHighlights: {}
-    DomTextMapper: {}
+    DomTextMapper:
+      options:
+        getIgnoredParts: -> $.makeArray $ [
+          "div.annotator-notice",
+          "div.annotator-frame"
+          "div.annotator-adder"
+        ].join ", "
+        filterAttributeChanges: (node, attributeName, oldValue, newValue) ->
+          return true unless attributeName is "class"
+          newClasses = if newValue then newValue.split " " else []
+          oldClasses = if oldValue then oldValue.split " " else []
+          addedClasses = (c for c in newClasses when c not in oldClasses)
+          removedClasses = (c for c in oldClasses when c not in newClasses)
+          changedClasses = addedClasses.concat removedClasses
+          if changedClasses.length is 1 and changedClasses[0] in [
+            'annotator-hl-active',
+            'annotator-hl-temporary'
+            'annotator-highlights-always-on'
+          ]
+            # We are just switching some highlights. Ignore this.
+            return false
+          else
+            true
     TextAnchors: {}
     FuzzyTextAnchors: {}
     PDF: {}
@@ -23,12 +45,10 @@ class Annotator.Guest extends Annotator
   visibleHighlights: false
   noBack: false
 
-  constructor: (element, options, config = {}) ->
+  constructor: (element, options) ->
     Gettext.prototype.parse_locale_data annotator_locale_data
 
-    options.noScan = true
     super
-    delete @options.noScan
 
     # Create an array for holding the comments
     @comments = []
@@ -73,10 +93,6 @@ class Annotator.Guest extends Annotator
       if not @plugins[name]
         this.addPlugin(name, opts)
 
-    unless config.dontScan
-      # Scan the document text with the DOM Text libraries
-      this.scanDocument "Guest initialized"
-
     # Watch for deleted comments
     this.subscribe 'annotationDeleted', (annotation) =>
       if this.isComment annotation
@@ -84,6 +100,17 @@ class Annotator.Guest extends Annotator
         if i isnt -1
           @comments[i..i] = []
           @plugins.Heatmap._update()
+
+    # Choose a document access policy.
+    #
+    # This would be done automatically when the annotations
+    # are loaded, but we need it sooner, so that the heatmap
+    # can work properly.
+    this._chooseAccessPolicy()
+
+    # While we are at it, we trigger an initial scan, too, so that
+    # it finishes ASAP
+    this.domMapper.prepare "Initing H"
 
   _setupXDM: (options) ->
     # jschannel chokes FF and Chrome extension origins.
@@ -135,8 +162,10 @@ class Annotator.Guest extends Annotator
 
     .bind('adderClick', =>
       @selectedTargets = @forcedLoginTargets
+      @selectedData = @forcedLoginData
       @onAdderClick @forcedLoginEvent
       delete @forcedLoginTargets
+      delete @forcedLoginData
       delete @forcedLoginEvent
     )
 
@@ -180,14 +209,6 @@ class Annotator.Guest extends Annotator
     .bind('updateHeatmap', =>
       @plugins.Heatmap._scheduleUpdate()
     )
-
-  scanDocument: (reason = "something happened") =>
-    try
-      console.log "Analyzing host frame, because " + reason + "..."
-      this._scan()
-    catch e
-      console.log e.message
-      console.log e.stack
 
   _setupWrapper: ->
     @wrapper = @element
@@ -256,7 +277,9 @@ class Annotator.Guest extends Annotator
 
   onSuccessfulSelection: (event, immediate) ->
     # Store the selected targets
+
     @selectedTargets = event.targets
+    @selectedData = event.annotationData
     if @tool is 'highlight'
 
       # Are we allowed to create annotations? Return false if we can't.
@@ -282,11 +305,16 @@ class Annotator.Guest extends Annotator
       # Create an empty annotation manually instead
       annotation = {inject: true}
 
-      annotation = this.setupAnnotation annotation
+      # If we have saved some data for this annotation, add it here
+      if @selectedData
+        @Annotator.$.extend annotation, @selectedData
+        delete @selectedData
 
-      # Notify listeners
-      this.publish 'beforeAnnotationCreated', annotation
-      this.publish 'annotationCreated', annotation
+      this.setupAnnotation(annotation).then =>
+
+        # Notify listeners
+        this.publish 'beforeAnnotationCreated', annotation
+        this.publish 'annotationCreated', annotation
     else
       super
 
@@ -361,13 +389,17 @@ class Annotator.Guest extends Annotator
         @element.removeClass markerClass
 
   addComment: ->
-    sel = @selectedTargets   # Save the selection
-    # Nuke the selection, since we won't be using that.
+    sel = @selectedTargets   # Save the targets
+    data = @selectedData     # Save any extra data
+
+    # Nuke the targets and any extra data, since we won't be using that.
     # We will attach this to the end of the document.
     # Our override for setupAnnotation will add that highlight.
     @selectedTargets = []
+    delete @selectedData
     this.onAdderClick()     # Open editor (with 0 targets)
-    @selectedTargets = sel # restore the selection
+    @selectedTargets = sel  # restore the targets
+    @selectedData = data    # restore any extra data
 
   # Is this annotation a comment?
   isComment: (annotation) ->
@@ -376,9 +408,11 @@ class Annotator.Guest extends Annotator
 
   # Override for setupAnnotation, to handle comments
   setupAnnotation: (annotation) ->
-    annotation = super # Set up annotation as usual
-    if this.isComment annotation then @comments.push annotation
-    annotation
+    promise = super # Set up annotation as usual
+    promise.then (annotation) =>
+      if this.isComment annotation
+        @comments.push annotation
+    promise
 
   # Open the sidebar
   showFrame: ->
@@ -404,6 +438,7 @@ class Annotator.Guest extends Annotator
     # Save the event and targets for restarting edit on forced login
     @forcedLoginEvent = event
     @forcedLoginTargets = @selectedTargets
+    @forcedLoginData = @selectedData
 
     # Hide the adder
     @adder.hide()
@@ -412,32 +447,32 @@ class Annotator.Guest extends Annotator
 
     # Show a temporary highlight so the user can see what they selected
     # Also extract the quotation and serialize the ranges
-    annotation = this.setupAnnotation(this.createAnnotation())
+    this.setupAnnotation(this.createAnnotation()).then (annotation) =>
 
-    hl.setTemporary(true) for hl in @getHighlights([annotation])
+      hl.setTemporary(true) for hl in @getHighlights([annotation])
 
-    # Subscribe to the editor events
+      # Subscribe to the editor events
 
-    # Make the highlights permanent if the annotation is saved
-    save = =>
-      do cleanup
-      hl.setTemporary false for hl in @getHighlights [annotation]
+      # Make the highlights permanent if the annotation is saved
+      save = =>
+        do cleanup
+        hl.setTemporary false for hl in @getHighlights [annotation]
 
-    # Remove the highlights if the edit is cancelled
-    cancel = =>
-      do cleanup
-      this.deleteAnnotation(annotation)
+      # Remove the highlights if the edit is cancelled
+      cancel = =>
+        do cleanup
+        this.deleteAnnotation(annotation)
 
-    # Don't leak handlers at the end
-    cleanup = =>
-      this.unsubscribe('annotationEditorHidden', cancel)
-      this.unsubscribe('annotationEditorSubmit', save)
+      # Don't leak handlers at the end
+      cleanup = =>
+        this.unsubscribe('annotationEditorHidden', cancel)
+        this.unsubscribe('annotationEditorSubmit', save)
 
-    this.subscribe('annotationEditorHidden', cancel)
-    this.subscribe('annotationEditorSubmit', save)
+      this.subscribe('annotationEditorHidden', cancel)
+      this.subscribe('annotationEditorSubmit', save)
 
-    # Display the editor.
-    this.showEditor(annotation, position)
+      # Display the editor.
+      this.showEditor(annotation, position)
 
     # We have to clear the selection.
     # (Annotator does this automatically by focusing on

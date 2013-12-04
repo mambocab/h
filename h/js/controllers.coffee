@@ -694,6 +694,9 @@ class Annotation
           $scope.model.highlightText =
             $scope.model.highlightText.replace regexp, annotator.highlighter
 
+    $scope.$on 'annotationsRefreshed', (evt, idList) =>
+      if $scope.model.$modelValue.id in idList # Was this annotation refreshed?
+        $scope.$digest() # If yes, digest changes
 
 class Editor
   this.$inject = [

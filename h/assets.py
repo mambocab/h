@@ -45,7 +45,6 @@ class CSSVersion(CSSUrlRewriter):
             relative = urlpath.relpath(self.output_url, resolved)
             return relative
 
-
 class WebassetsResourceRegistry(object):
     def __init__(self, env):
         self.env = env

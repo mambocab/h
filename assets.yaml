@@ -45,9 +45,11 @@ annotator_fuzzytextanchors:
   output: lib/annotator.fuzzytextanchors.min.js
   contents:
     - h:lib/diff_match_patch_uncompressed.js
+    - h:lib/mutation-summary.js
     - filters: coffeescript
       output: lib/dom_text.js
       contents:
+        - h:lib/text_mapper_core.coffee
         - h:lib/dom_text_mapper.coffee
         - h:lib/dom_text_matcher.coffee
         - h:lib/text_match_engines.coffee
@@ -62,6 +64,7 @@ annotator_pdf:
       output: lib/page_text_mapper_core.js
       contents:
         - h:lib/page_text_mapper_core.coffee
+        - h:lib/pdf_text_mapper.coffee
     - h:lib/annotator.pdf.js
 annotator_textanchors:
   filters: uglifyjs
