@@ -285,6 +285,10 @@ class Annotator.Plugin.Bridge extends Annotator.Plugin
     this
 
   annotationsLoaded: (annotations) =>
+    unless annotations.length
+      console.log "Useless call to 'annotationsLoaded()' with an empty list"
+      console.trace()
+      return
     this._notify
       method: 'loadAnnotations'
       params: (this._format a for a in annotations)
