@@ -87,6 +87,21 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
 
     @Annotator = Annotator
     @$ = Annotator.$
+
+    # Register the creator for range selectors
+    @annotator.selectorCreators.push
+      name: "RangeSelector"
+      describe: @_getRangeSelector
+
+    # Register the creator for text quote selectors
+    @annotator.selectorCreators.push
+      name: "TextPositionSelector"
+      describe: @_getTextPositionSelector
+
+    # Register the creator for text quote selectors
+    @annotator.selectorCreators.push
+      name: "TextQuoteSelector"
+      describe: @_getTextQuoteSelector
         
     # Register our anchoring strategies
     @annotator.anchoringStrategies.push
@@ -195,7 +210,12 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
       return if @annotator.isAnnotator(container)
 
     if selectedRanges.length
-      event.targets = (@getTargetFromRange(r) for r in selectedRanges)
+      @checkDTM()
+      event.targets = []
+      for r in selectedRanges
+        event.targets.push @annotator.getTargetFromSelection
+          type: "text range"
+          range: r
 
       # Do we have valid page coordinates inside the event
       # which has triggered this function?
@@ -210,72 +230,65 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
       @annotator.onFailedSelection event
 
   # Create a RangeSelector around a range
-  _getRangeSelector: (range) ->
-    sr = range.serialize @annotator.wrapper[0]
-
-    type: "RangeSelector"
-    startContainer: sr.startContainer
-    startOffset: sr.startOffset
-    endContainer: sr.endContainer
-    endOffset: sr.endOffset
+  _getRangeSelector: (selection) =>
+    return [] unless selection.type is "text range"
+    sr = selection.range.serialize @annotator.wrapper[0]
+    [
+      type: "RangeSelector"
+      startContainer: sr.startContainer
+      startOffset: sr.startOffset
+      endContainer: sr.endContainer
+      endOffset: sr.endOffset
+    ]
 
   # Create a TextQuoteSelector around a range
-  _getTextQuoteSelector: (range) ->
-    unless range?
-      throw new Error "Called getTextQuoteSelector(range) with null range!"
+  _getTextQuoteSelector: (selection) =>
+    return [] unless selection.type is "text range"
 
-    rangeStart = range.start
+    unless selection.range?
+      throw new Error "Called getTextQuoteSelector() with null range!"
+
+    rangeStart = selection.range.start
     unless rangeStart?
-      throw new Error "Called getTextQuoteSelector(range) on a range with no valid start."
-    rangeEnd = range.end
+      throw new Error "Called getTextQuoteSelector() on a range with no valid start."
+    rangeEnd = selection.range.end
     unless rangeEnd?
-      throw new Error "Called getTextQuoteSelector(range) on a range with no valid end."
+      throw new Error "Called getTextQuoteSelector() on a range with no valid end."
 
-    if @useDTM
-      # Calculate the quote and context using DTM
+    [
+      if @useDTM
+        # Calculate the quote and context using DTM
 
-      startOffset = (@annotator.domMapper.getInfoForNode rangeStart).start
-      endOffset = (@annotator.domMapper.getInfoForNode rangeEnd).end
-      quote = @annotator.domMapper.getCorpus()[startOffset .. endOffset-1].trim()
-      [prefix, suffix] = @annotator.domMapper.getContextForCharRange startOffset, endOffset
+        startOffset = (@annotator.domMapper.getInfoForNode rangeStart).start
+        endOffset = (@annotator.domMapper.getInfoForNode rangeEnd).end
+        quote = @annotator.domMapper.getCorpus()[startOffset .. endOffset-1].trim()
+        [prefix, suffix] = @annotator.domMapper.getContextForCharRange startOffset, endOffset
 
-      type: "TextQuoteSelector"
-      exact: quote
-      prefix: prefix
-      suffix: suffix
-    else
-      # Get the quote directly from the range
+        type: "TextQuoteSelector"
+        exact: quote
+        prefix: prefix
+        suffix: suffix
+      else
+        # Get the quote directly from the range
 
-      type: "TextQuoteSelector"
-      exact: range.text().trim()
+        type: "TextQuoteSelector"
+        exact: selection.range.text().trim()
+
+    ]
 
 
   # Create a TextPositionSelector around a range
-  _getTextPositionSelector: (range) ->
-    startOffset = (@annotator.domMapper.getInfoForNode range.start).start
-    endOffset = (@annotator.domMapper.getInfoForNode range.end).end
+  _getTextPositionSelector: (selection) =>
+    return [] unless selection.type is "text range"
 
-    type: "TextPositionSelector"
-    start: startOffset
-    end: endOffset
+    startOffset = (@annotator.domMapper.getInfoForNode selection.range.start).start
+    endOffset = (@annotator.domMapper.getInfoForNode selection.range.end).end
 
-  # Create a target around a normalizedRange
-  getTargetFromRange: (range) ->
-    # Before going any further, re-evaluate the presence of DTM
-    @checkDTM()
-
-    # Create the target
-    result =
-      source: @annotator.getHref()
-      selector: [
-        @_getRangeSelector range
-        @_getTextQuoteSelector range
-      ]
-
-    if @useDTM
-      # If we have DTM, then we can save a position selector, too
-      result.selector.push @_getTextPositionSelector range
-    result
+    [
+      type: "TextPositionSelector"
+      start: startOffset
+      end: endOffset
+    ]
 
   # Look up the quote from the appropriate selector
   getQuoteForTarget: (target) ->

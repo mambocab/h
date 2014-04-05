@@ -104,6 +104,7 @@ class Annotator extends Delegator
   constructor: (element, options) ->
     super
     @plugins = {}
+    @selectorCreators = []
     @anchoringStrategies = []
 
     # Return early if the annotator is not supported.
@@ -627,6 +628,19 @@ class Annotator extends Delegator
     unless event and this.isAnnotator(event.target)
       this.startViewerHideTimer()
     @mouseIsDown = true
+
+  # This is called to create a target from a raw selection,
+  # using selectors created by the registered selector creators
+  getTargetFromSelection: (selection) =>
+    selectors = []
+    for c in @selectorCreators
+      description = c.describe selection
+      for selector in description
+        selectors.push selector
+
+    # Create the target
+    source: @getHref()
+    selector: selectors
 
   # This method is to be called by the mechanisms responsible for
   # triggering annotation (and highlight) creation.
