@@ -13,6 +13,9 @@ class Annotator.Guest extends Annotator
     TextHighlights: {}
     DomTextMapper: {}
     TextAnchors: {}
+    TextRange: {}
+    TextPosition: {}
+    TextQuote: {}
     FuzzyTextAnchors: {}
     PDF: {}
     Document: {}
