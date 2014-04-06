@@ -2,11 +2,14 @@
 class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
 
   pluginInit: ->
+
+    @Annotator = Annotator
+
     # Do we have the basic text anchors plugin loaded?
     unless @annotator.plugins.TextAnchors
       throw "The FuzzyTextAnchors Annotator plugin requires the TextAnchors plugin."
-    unless @annotator.plugins.DomTextMapper
-      throw "The FuzzyTextAnchors Annotator plugin requires the DomTextMapper plugin."
+    unless @annotator.plugins.TextPosition
+      throw "The FuzzyTextAnchors Annotator plugin requires the TextPosition plugin."
 
     # Initialize the text matcher library
     @textFinder = new DomTextMatcher => @annotator.domMapper.getCorpus()
@@ -61,7 +64,7 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
 
     # OK, we have everything
     # Create a TextPositionAnchor from this data
-    new @annotator.TextPositionAnchor @annotator, annotation, target,
+    new @Annotator.TextPositionAnchor @annotator, annotation, target,
       match.start, match.end,
       (@annotator.domMapper.getPageIndexForPos match.start),
       (@annotator.domMapper.getPageIndexForPos match.end),
@@ -109,7 +112,7 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
 
     # OK, we have everything
     # Create a TextPosutionAnchor from this data
-    new @annotator.TextPositionAnchor @annotator, annotation, target,
+    new @Annotator.TextPositionAnchor @annotator, annotation, target,
       match.start, match.end,
       (@annotator.domMapper.getPageIndexForPos match.start),
       (@annotator.domMapper.getPageIndexForPos match.end),

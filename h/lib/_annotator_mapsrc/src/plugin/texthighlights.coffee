@@ -5,7 +5,6 @@ class TextHighlight extends Annotator.Highlight
 
   # Save the Annotator class reference, while we have access to it.
   # TODO: Is this really the way to go? How do other plugins do it?
-  @Annotator = Annotator
   @$ = Annotator.$
   @highlightType = 'TextHighlight'
 
@@ -89,7 +88,6 @@ class TextHighlight extends Annotator.Highlight
     TextHighlight._init @annotator
 
     @$ = TextHighlight.$
-    @Annotator = TextHighlight.Annotator
 
     # Create a highlights, and link them with the annotation
     @_highlights = @_highlightRange normedRange
@@ -142,6 +140,39 @@ class TextHighlight extends Annotator.Highlight
 class Annotator.Plugin.TextHighlights extends Annotator.Plugin
 
   # Plugin initialization
-  pluginInit: ->
-    # Export the text highlight class for other plugins
-    Annotator.TextHighlight = TextHighlight
+  pluginInit: =>
+
+    @Annotator = Annotator
+
+    # Register this highlighting implementation
+    @annotator.highlighters.push
+      name: "standard text highlighter"
+      highlight: @_createTextHighlight
+
+  _createTextHighlight: (anchor, page) =>
+    switch anchor.type
+      when "text range"
+        # Simply create a span around this range
+        new TextHighlight anchor, 0, anchor.range
+      when "text position"
+        if @annotator.domMapper?
+          # First we create the range from the stored stard and end offsets
+          mappings = @annotator.domMapper.getMappingsForCharRange anchor.start, anchor.end, [page]
+
+          # Get the wanted range out of the response of DTM
+          realRange = mappings.sections[page].realRange
+
+          # Get a BrowserRange
+          browserRange = new @Annotator.Range.BrowserRange realRange
+
+          # Get a NormalizedRange
+          normedRange = browserRange.normalize @annotator.wrapper[0]
+
+          # Create the highligh
+          new TextHighlight anchor, page, normedRange
+        else
+          # Can't do this without DTM.
+          null
+      else
+        # Unsupported anchor type
+        null

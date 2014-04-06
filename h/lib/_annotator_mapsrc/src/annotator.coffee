@@ -106,6 +106,7 @@ class Annotator extends Delegator
     @plugins = {}
     @selectorCreators = []
     @anchoringStrategies = []
+    @highlighters = []
 
     # Return early if the annotator is not supported.
     return this unless Annotator.supported()
@@ -808,6 +809,15 @@ class Annotator extends Delegator
 
     # Delete highlight elements.
     this.deleteAnnotation annotation
+
+  # Create a highlight for an anchor, using one of the registered
+  # highlighting implementations.
+  _createHighlight: (anchor, page) ->
+    for h in @highlighters
+      result = h.highlight anchor, page
+      if result
+        return result
+    throw new Error "No highlighter that could handle anchor type" +anchor.type
 
   # Collect all the highlights (optionally for a given set of annotations)
   getHighlights: (annotations) ->

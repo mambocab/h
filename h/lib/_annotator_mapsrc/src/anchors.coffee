@@ -1,22 +1,19 @@
 # Abstract anchor class.
 class Anchor
 
-  constructor: (@annotator, @annotation, @target
+  constructor: (@annotator, @annotation, @target, @type,
       @startPage, @endPage,
       @quote, @diffHTML, @diffCaseOnly) ->
 
-    unless @annotator? then throw "annotator is required!"
-    unless @annotation? then throw "annotation is required!"
-    unless @target? then throw "target is required!"
-    unless @startPage? then "startPage is required!"
-    unless @endPage? then throw "endPage is required!"
-    unless @quote? then throw "quote is required!"
+    unless @annotator? then throw new Error "annotator is required!"
+    unless @annotation? then throw new Error "annotation is required!"
+    unless @target? then throw new Error "target is required!"
+    unless @type then throw new Error "type is required!"
+    unless @startPage? then new Error "startPage is required!"
+    unless @endPage? then throw new Error "endPage is required!"
+    unless @quote? then throw new Error "quote is required!"
 
     @highlight = {}
-
-  # Return highlights for the given page
-  _createHighlight: (page) ->
-    throw "Function not implemented"
 
   # Create the missing highlights for this anchor
   realize: () =>
@@ -33,7 +30,7 @@ class Anchor
 
     # Create the new highlights
     created = for page in pagesTodo
-      @highlight[page] = @_createHighlight page
+      @highlight[page] = @annotator._createHighlight this, page
 
     # Check if everything is rendered now
     @fullyRealized = renderedPages.length is @endPage - @startPage + 1
