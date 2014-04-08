@@ -8,13 +8,6 @@ class TextHighlight extends Annotator.Highlight
   @$ = Annotator.$
   @highlightType = 'TextHighlight'
 
-  # Is this element a text highlight physical anchor ?
-  @isInstance: (element) -> @$(element).hasClass 'annotator-hl'
-
-  # Find the first parent outside this physical anchor
-  @getIndependentParent: (element) ->
-    @$(element).parents(':not([class^=annotator-hl])')[0]
-
   # List of annotators we have already set up events for
   @_inited: []
 
@@ -143,17 +136,20 @@ class Annotator.Plugin.TextHighlights extends Annotator.Plugin
   pluginInit: =>
 
     @Annotator = Annotator
+    @$ = Annotator.$
 
     # Register this highlighting implementation
     @annotator.highlighters.push
       name: "standard text highlighter"
       highlight: @_createTextHighlight
+      isInstance: @_isInstance
+      getIndependentParent: @_getIndependentParent
 
   _createTextHighlight: (anchor, page) =>
     switch anchor.type
       when "text range"
         # Simply create a span around this range
-        new TextHighlight anchor, 0, anchor.range
+        new TextHighlight anchor, page, anchor.range
       when "text position"
         if @annotator.domMapper?
           # First we create the range from the stored stard and end offsets
@@ -176,3 +172,10 @@ class Annotator.Plugin.TextHighlights extends Annotator.Plugin
       else
         # Unsupported anchor type
         null
+
+  # Is this element a text highlight physical anchor ?
+  _isInstance: (element) => @$(element).hasClass 'annotator-hl'
+
+  # Find the first parent outside this physical anchor
+  _getIndependentParent: (element) =>
+    @$(element).parents(':not([class^=annotator-hl])')[0]
