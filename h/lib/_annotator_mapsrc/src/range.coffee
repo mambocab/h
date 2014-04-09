@@ -58,8 +58,8 @@ Range.nodeFromXPath = (xpath, root=document) ->
       # See http://www.w3.org/TR/DOM-Level-3-XPath/xpath.html#XPathException
       # This does not necessarily make any sense, but this what we see
       # happening.
-      console.log "XPath evaluation failed."
-      console.log "Trying fallback..."
+#      console.log "XPath evaluation failed."
+#      console.log "Trying fallback..."
       # We have a an 'evaluator' for the really simple expressions that
       # should work for the simple expressions we generate.
       Util.nodeFromXPath(xp, root)
@@ -191,14 +191,12 @@ class Range.BrowserRange
 
     # Now let's start to slice & dice the text elements!
     nr = {}
-    changed = false
 
     if r.startOffset > 0
       # Do we really have to cut?
       if r.start.nodeValue.length > r.startOffset
         # Yes. Cut.
         nr.start = r.start.splitText(r.startOffset)
-        changed = true
       else
         # Avoid splitting off zero-length pieces.
         nr.start = r.start.nextSibling
@@ -209,26 +207,17 @@ class Range.BrowserRange
     if r.start is r.end
       if nr.start.nodeValue.length > (r.endOffset - r.startOffset)
         nr.start.splitText(r.endOffset - r.startOffset)
-        changed = true
       nr.end = nr.start
     else # no, the end of the selection is in a separate text element
       # does the end need to be cut?
       if r.end.nodeValue.length > r.endOffset
         r.end.splitText(r.endOffset)
-        changed = true
       nr.end = r.end
 
     # Make sure the common ancestor is an element node.
     nr.commonAncestor = @commonAncestorContainer
     while nr.commonAncestor.nodeType isnt Node.ELEMENT_NODE
       nr.commonAncestor = nr.commonAncestor.parentNode
-
-    if changed
-      event = document.createEvent "UIEvents"
-      event.initUIEvent "domChange", true, false, window, 0
-      event.reason = "range normalization"
-      event.data = nr
-      nr.commonAncestor.dispatchEvent event
 
     new Range.NormalizedRange(nr)
 

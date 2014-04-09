@@ -121,3 +121,16 @@ Util.escape = (html) ->
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+
+# Assuming we have an array with unique members,
+# add this new element, if it's not already a member.
+Util.addToSet = (element, set) ->
+  set.push element unless element in set
+
+# Assuming we have an array with unique members,
+# remove this element, it it's a member.
+Util.removeFromSet = (element, set) ->
+  index = set.indexOf element
+  unless index is -1
+    set[index..index] = []
+  null

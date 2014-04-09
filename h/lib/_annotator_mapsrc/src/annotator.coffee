@@ -42,12 +42,13 @@ _Annotator = this.Annotator
 # Fake two-phase / pagination support, used for HTML documents
 class DummyDocumentAccess
 
+  constructor: (@rootNode) ->
   @applicable: -> true
   getPageIndex: -> 0
   getPageCount: -> 1
+  getPageRoot: -> @rootNode
   getPageIndexForPos: -> 0
   isPageMapped: -> true
-  scan: ->
 
 class Annotator extends Delegator
   # Events to be bound on Annotator#element.
@@ -69,6 +70,7 @@ class Annotator extends Delegator
   viewer: null
 
   selectedTargets: null
+  selectedData: null
 
   mouseIsDown: false
 
@@ -114,12 +116,14 @@ class Annotator extends Delegator
     this._setupDocumentAccessStrategies()
     this._setupViewer()._setupEditor()
     this._setupDynamicStyle()
-
-    # Perform initial DOM scan, unless told not to.
-    this._scan() unless @options.noScan
+    this.enableAnnotating()
 
     # Create adder
     this.adder = $(this.html.adder).appendTo(@wrapper).hide()
+
+    # Create buckets for orphan and half-orphan annotations
+    this.orphans = []
+    this.halfOrphans = []
 
   # Initializes the available document access strategies
   _setupDocumentAccessStrategies: ->
@@ -127,39 +131,31 @@ class Annotator extends Delegator
       # Default dummy strategy for simple HTML documents.
       # The generic fallback.
       name: "Dummy"
-      mapper: DummyDocumentAccess
+      applicable: -> true
+      get: => new DummyDocumentAccess @wrapper[0]
     ]
 
     this
 
   # Initializes the components used for analyzing the document
   _chooseAccessPolicy: ->
-    if @domMapper? then return
+    # We only have to do this once.
+    return if @domMapper
 
     # Go over the available strategies
     for s in @documentAccessStrategies
       # Can we use this strategy for this document?
-      if s.mapper.applicable()
+      if s.applicable()
         @documentAccessStrategy = s
         console.log "Selected document access strategy: " + s.name
-        @domMapper = new s.mapper()
+        @domMapper = s.get()
         @anchors = {}
         addEventListener "docPageMapped", (evt) =>
           @_realizePage evt.pageIndex
         addEventListener "docPageUnmapped", (evt) =>
           @_virtualizePage evt.pageIndex
-        s.init?()
         return this
 
-  # Perform a scan of the DOM. Required for finding anchors.
-  _scan: ->
-    # If we haven't yet chosen a document access strategy, do so now.
-    this._chooseAccessPolicy() unless @domMapper
-    @pendingScan = @domMapper.scan()
-    if @pendingScan?
-      @pendingScan.then => @enableAnnotating()
-    else
-      @enableAnnotating()
 
   # Wraps the children of @element in a @wrapper div. NOTE: This method will also
   # remove any script elements inside @element to prevent them re-executing.
@@ -312,6 +308,12 @@ class Annotator extends Delegator
   # Returns a newly created annotation Object.
   createAnnotation: () ->
     annotation = {}
+
+    # If we have saved some data for this annotation, add it here
+    if @selectedData
+      Annotator.$.extend annotation, @selectedData
+      delete @selectedData
+
     this.publish('beforeAnnotationCreated', [annotation])
     annotation
 
@@ -326,33 +328,72 @@ class Annotator extends Delegator
       if selector.type is type then return selector
     null
 
+
+  # Recursive method to go over the passed list of strategies,
+  # and create an anchor with the first one that succeeds.
+  _createAnchorWithStrategies: (annotation, target, strategies, promise) ->
+
+    # Fetch the next strategy to try
+    s = strategies.shift()
+
+    # We will do this if this strategy failes
+    onFail = (error, boring = false) =>
+#      unless boring then console.log "Anchoring strategy",
+#        "'" + s.name + "'",
+#        "has failed:",
+#        error
+
+      # Do we have more strategies to try?
+      if strategies.length
+        # Check the next strategy.
+        @_createAnchorWithStrategies annotation, target, strategies, promise
+      else
+        # No, it's game over
+        promise.reject()
+
+    try
+      # Get a promise from this strategy
+#      console.log "Executing strategy '" + s.name + "'..."
+      iteration = s.create annotation, target
+
+      # Run this strategy
+      iteration.then( (anchor) => # This strategy has worked.
+#        console.log "Anchoring strategy '" + s.name + "' has succeeded:",
+#          anchor
+
+        # Note the name of the successful strategy
+        anchor.strategy = s
+
+        # We can now resolve the promise
+        promise.resolve anchor
+
+      ).fail onFail
+    catch error
+      # The strategy has thrown an error!
+      console.log "While trying anchoring strategy",
+        "'" + s.name + "':",
+      console.log error.stack
+      onFail "see exception above"
+
+    null
+
   # Try to find the right anchoring point for a given target
   #
-  # Returns an Anchor object if succeeded, null otherwise
-  createAnchor: (annotation, target) ->
+  # Returns a promise, which will be resolved with an Anchor object
+  _createAnchor: (annotation, target) ->
     unless target?
       throw new Error "Trying to find anchor for null target!"
-#    console.log "Trying to find anchor for target: "
-#    console.log target
+    #console.log "Trying to find anchor for target: ", target
 
-    error = null
-    anchor = null
-    for s in @anchoringStrategies
-      try
-        a = s.code.call this, annotation, target
-        if a
-#          console.log "Strategy '" + s.name + "' yielded an anchor."
-          return result: a
-#        else
-#          console.log "Strategy '" + s.name + "' did NOT yield an anchor."
-      catch error
-#        console.log "Strategy '" + s.name + "' has thrown an error."
-        if error instanceof Range.RangeError
-          return error: error
-        else
-          throw error
+    # Create a Deferred object
+    dfd = Annotator.$.Deferred()
 
-    return error: "No strategies worked."
+    # Start to go over all the strategies
+    @_createAnchorWithStrategies annotation, target,
+      @anchoringStrategies.slice(), dfd
+
+    # Return the promise
+    dfd.promise()
 
   # Public: Initialises an annotation either from an object representation or
   # an annotation created with Annotator#createAnnotation(). It finds the
@@ -375,6 +416,10 @@ class Annotator extends Delegator
   #
   # Returns the initialised annotation.
   setupAnnotation: (annotation) ->
+
+    # To work with annotations, we need to have a document access policy.
+    this._chooseAccessPolicy()
+
     # If this is a new annotation, we might have to add the targets
     annotation.target ?= @selectedTargets
     @selectedTargets = []
@@ -382,44 +427,104 @@ class Annotator extends Delegator
     unless annotation.target?
       throw new Error "Can not run setupAnnotation(). No target or selection available."
 
-    annotation.quote = []
-    annotation.anchors = []
+    # In the lonely world of annotations, everybody is born as an orphan.
+    this.orphans.push annotation
 
-    for t in annotation.target
-      try
-        # Create an anchor for this target
-        result = this.createAnchor annotation, t
-        anchor = result.result
-        if result.error? instanceof Range.RangeError
-          this.publish 'rangeNormalizeFail', [annotation, result.error.range, result.error]
-        if anchor?
-          annotation.quote.push t.quote = anchor.quote
-          t.diffHTML = anchor.diffHTML
-          t.diffCaseOnly = anchor.diffCaseOnly
+    # In order to change this, let's try to anchor this annotation!
+    this._anchorAnnotation annotation
 
-          # Store this anchor for the annotation
-          annotation.anchors.push anchor
+  # Find the anchor belonging to a given target
+  _findAnchorForTarget: (annotation, target) ->
+    for anchor in annotation.anchors when anchor.target is target
+      return anchor
+    return null
 
-          # Store the anchor for all involved pages
-          for pageIndex in [anchor.startPage .. anchor.endPage]
-            @anchors[pageIndex] ?= []
-            @anchors[pageIndex].push anchor
+  # Decides whether or not a given target is anchored
+  _hasAnchorForTarget: (annotation, target) ->
+    anchor = this._findAnchorForTarget annotation, target
+    anchor?
 
-          # Realizing the anchor
-          anchor.realize()
+  # Tries to create any missing anchors for the given annotation
+  # Optionally accepts a filter to test targetswith
+  _anchorAnnotation: (annotation, targetFilter, publishEvent = false) ->
 
-        else
-          console.log "Could not create anchor for annotation '",
-            annotation.id, "'."
-      catch exception
-        if exception.stack? then console.log exception.stack
-        console.log exception.message
-        console.log exception
+    # Supply a dummy target filter, if needed
+    targetFilter ?= (target) -> true
 
-    # Join all the quotes into one string.
-    annotation.quote = annotation.quote.join(' / ')
+    # Build a filter to test targets with.
+    shouldDo = (target) =>
+      (not this._hasAnchorForTarget annotation, target) and # has no ancher
+        (targetFilter target)  # Passes the optional filter
 
-    annotation
+    annotation.quote = (t.quote for t in annotation.target)
+    annotation.anchors ?= []
+
+    # Collect promises for all the involved targets
+    promises = for t in annotation.target when shouldDo t
+
+      index = annotation.target.indexOf t
+
+      # Create an anchor for this target
+      this._createAnchor(annotation, t).then (anchor) =>
+        # We have an anchor
+        annotation.quote[index] = t.quote
+
+        # Realizing the anchor
+        anchor.realize()
+
+    # The deferred object we will use for timing
+    dfd = Annotator.$.Deferred()
+
+    Annotator.$.when(promises...).always =>
+
+      # Join all the quotes into one string.
+      annotation.quote = annotation.quote.filter((q)->q?).join ' / '
+
+      # Did we actually manage to anchor anything?
+      if "resolved" in (p.state() for p in promises)
+
+        if this.changedAnnotations? # Are we collecting anchoring changes?
+          this.changedAnnotations.push annotation  # Add this annotation
+
+        if publishEvent  # Are we supposed to publish an event?
+          this.publish "annotationsLoaded", [[annotation]]
+
+      # We are done!
+      dfd.resolve annotation
+
+    # Return a promise
+    dfd.promise()
+
+  # Tries to create any missing anchors for all annotations
+  _anchorAllAnnotations: (targetFilter) ->
+    # The deferred object we will use for timing
+    dfd = Annotator.$.Deferred()
+
+    # We have to consider the orphans and half-orphans, since they are
+    # the onees with missing annotations
+    annotations = this.halfOrphans.concat this.orphans
+
+    # Initiate the collection of changes
+    this.changedAnnotations = []
+
+    # Get promises for anchoring all annotations
+    promises = for annotation in annotations
+      this._anchorAnnotation annotation, targetFilter
+
+    # Wait for all attempts for finish/fail
+    Annotator.$.when(promises...).always =>
+
+      # send out notifications and updates
+      if this.changedAnnotations.length
+        this.publish "annotationsLoaded", [this.changedAnnotations]
+      delete this.changedAnnotations
+
+      # When all is said and done
+      dfd.resolve()
+
+    # Return a promise
+    dfd.promise()
+
 
   # Public: Publishes the 'beforeAnnotationUpdated' and 'annotationUpdated'
   # events. Listeners wishing to modify an updated annotation should subscribe
@@ -450,9 +555,13 @@ class Annotator extends Delegator
   #
   # Returns deleted annotation.
   deleteAnnotation: (annotation) ->
-    if annotation.anchors?    
-      for a in annotation.anchors
-        a.remove()
+    if annotation.anchors?                     # If we have anchors,
+      a.remove() for a in annotation.anchors   # remove them
+
+    # By the time we delete them, every annotation is an orphan,
+    # (since we have just deleted all of it's anchors),
+    # so time to remove it from the orphan list.
+    Util.removeFromSet annotation, this.orphans
 
     this.publish('annotationDeleted', [annotation])
     annotation
@@ -472,30 +581,24 @@ class Annotator extends Delegator
     loader = (annList=[]) =>
       now = annList.splice(0,10)
 
-      for n in now
-        this.setupAnnotation(n)
+      # Collect promises for all these annotations
+      promises = (this.setupAnnotation(n) for n in now)
 
-      # If there are more to do, do them after a 10ms break (for browser
-      # responsiveness).
-      if annList.length > 0
-        setTimeout((-> loader(annList)), 10)
-      else
-        this.publish 'annotationsLoaded', [clone]
+      # All annotations in this batch are done.
+      $.when(promises...).always =>
+
+        # If there are more to do, do them after a 10ms break (for browser
+        # responsiveness).
+        if annList.length > 0
+          setTimeout((-> loader(annList)), 10)
+        else
+          this.publish 'annotationsLoaded', [clone]
 
     clone = annotations.slice()
 
     if annotations.length # Do we have to do something?
-      # Do we have a doc access strategy? If we don't have it yet, scan!
-      @_scan() unless @domMapper
-      if @pendingScan?    # Is there a pending scan?
-        # Schedule the parsing the annotations for
-        # when scan has finished
-        @pendingScan.then =>
-          #console.log "Document scan finished. Can start anchoring."
-          setTimeout => loader annotations
-      else # no pending scan
-        # We can start parsing them right away
-        loader annotations
+      setTimeout => loader annotations
+
     this
 
   # Public: Calls the Store#dumpAnnotations() method.
@@ -645,9 +748,9 @@ class Annotator extends Delegator
   onSuccessfulSelection: (event, immediate = false) ->
     # Check whether we got a proper event
     unless event?
-      throw "Called onSuccessfulSelection without an event!"
+      throw new Error "Called onSuccessfulSelection without an event!"
     unless event.targets?
-      throw "Called onSuccessulSelection with an event with missing targets!"
+      throw new Error "Called onSuccessulSelection with an event with missing targets!"
 
     # Are we allowed to create annotations?
     unless @canAnnotate
@@ -657,6 +760,7 @@ class Annotator extends Delegator
 
     # Store the selected targets
     @selectedTargets = event.targets
+    @selectedData = event.annotationData
 
     # Do we want immediate annotation?
     if immediate
@@ -673,6 +777,7 @@ class Annotator extends Delegator
   onFailedSelection: (event) ->
     @adder.hide()
     @selectedTargets = []
+    delete @selectedData
 
 
   # Public: Determines if the provided element is part of the annotator plugin.
@@ -722,38 +827,38 @@ class Annotator extends Delegator
     annotation = this.createAnnotation()
 
     # Extract the quotation and serialize the ranges
-    annotation = this.setupAnnotation(annotation)
+    this.setupAnnotation(annotation).then (annotation) =>
 
-    # Show a temporary highlight so the user can see what they selected
-    for anchor in annotation.anchors
-      for page, hl of anchor.highlight
-        hl.setTemporary true
-
-    # Make the highlights permanent if the annotation is saved
-    save = =>
-      do cleanup
+      # Show a temporary highlight so the user can see what they selected
       for anchor in annotation.anchors
         for page, hl of anchor.highlight
-          hl.setTemporary false
-      # Fire annotationCreated events so that plugins can react to them
-      this.publish('annotationCreated', [annotation])
+          hl.setTemporary true
 
-    # Remove the highlights if the edit is cancelled
-    cancel = =>
-      do cleanup
-      this.deleteAnnotation(annotation)
+      # Make the highlights permanent if the annotation is saved
+      save = =>
+        do cleanup
+        for anchor in annotation.anchors
+          for page, hl of anchor.highlight
+            hl.setTemporary false
+        # Fire annotationCreated events so that plugins can react to them
+        this.publish('annotationCreated', [annotation])
 
-    # Don't leak handlers at the end
-    cleanup = =>
-      this.unsubscribe('annotationEditorHidden', cancel)
-      this.unsubscribe('annotationEditorSubmit', save)
+      # Remove the highlights if the edit is cancelled
+      cancel = =>
+        do cleanup
+        this.deleteAnnotation(annotation)
 
-    # Subscribe to the editor events
-    this.subscribe('annotationEditorHidden', cancel)
-    this.subscribe('annotationEditorSubmit', save)
+      # Don't leak handlers at the end
+      cleanup = =>
+        this.unsubscribe('annotationEditorHidden', cancel)
+        this.unsubscribe('annotationEditorSubmit', save)
 
-    # Display the editor.
-    this.showEditor(annotation, position)
+      # Subscribe to the editor events
+      this.subscribe('annotationEditorHidden', cancel)
+      this.subscribe('annotationEditorSubmit', save)
+
+      # Display the editor.
+      this.showEditor(annotation, position)
 
   # Annotator#viewer callback function. Displays the Annotator#editor in the
   # positions of the Annotator#viewer and loads the passed annotation for
@@ -828,6 +933,40 @@ class Annotator extends Delegator
   onAnchorMouseover: (event) ->
     #console.log "Mouse over annotations:", event.data.getAnnotations event
 
+  # Tell all anchors to verify themselves
+  _verifyAllAnchors: (reason = "no reason in particular", data = null) =>
+#    console.log "Verifying all anchors, because of", reason, data
+
+    # The deferred object we will use for timing
+    dfd = Annotator.$.Deferred()
+
+    promises = [] # Let's collect promises from all anchors
+
+    for page, anchors of @anchors     # Go over all the pages
+      for anchor in anchors.slice()   # and all the anchors
+        promises.push anchor.verify reason, data    # and verify them
+
+    # Wait for all attempts for finish/fail
+    Annotator.$.when(promises...).always -> dfd.resolve()
+
+    # Return a promise
+    dfd.promise()
+
+  # Re-anchor all the annotations
+  _reanchorAllAnnotations: (reason = "no reason in particular",
+      data = null, targetFilter = null
+  ) =>
+
+    # The deferred object we will use for timing
+    dfd = Annotator.$.Deferred()
+
+    this._verifyAllAnchors(reason, data)     # Verify all anchors
+    .then => this._anchorAllAnnotations(targetFilter) # re-create anchors
+    .then -> dfd.resolve()   # we are done
+
+    # Return a promise
+    dfd.promise()
+
     # Cancel any pending hiding of the viewer.
     this.clearViewerHideTimer()
 
@@ -847,6 +986,7 @@ class Annotator extends Delegator
 
   onAnchorClick: (event) ->
     #console.log "Click on annotations:", event.data.getAnnotations event
+    #console.log "(Highlight type: '" + event.data.highlightType + "')"
 
 # Create namespace for Annotator plugins
 class Annotator.Plugin extends Delegator
