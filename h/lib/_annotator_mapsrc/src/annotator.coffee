@@ -107,6 +107,7 @@ class Annotator extends Delegator
   constructor: (element, options) ->
     super
     @plugins = {}
+    @selectorCreators = []
     @anchoringStrategies = []
 
     # Return early if the annotator is not supported.
@@ -334,33 +335,33 @@ class Annotator extends Delegator
   # and create an anchor with the first one that succeeds.
   _createAnchorWithStrategies: (annotation, target, strategies, promise) ->
 
+    # Do we have more strategies to try?
+    unless strategies.length
+      # No, it's game over
+      promise.reject()
+      return
+
     # Fetch the next strategy to try
     s = strategies.shift()
 
     # We will do this if this strategy failes
     onFail = (error, boring = false) =>
-#      unless boring then console.log "Anchoring strategy",
-#        "'" + s.name + "'",
-#        "has failed:",
-#        error
+      #unless boring then console.log "Anchoring strategy",
+      #  "'" + s.name + "'",
+      #  "has failed:",
+      #  error
 
-      # Do we have more strategies to try?
-      if strategies.length
-        # Check the next strategy.
-        @_createAnchorWithStrategies annotation, target, strategies, promise
-      else
-        # No, it's game over
-        promise.reject()
+      @_createAnchorWithStrategies annotation, target, strategies, promise
 
     try
       # Get a promise from this strategy
-#      console.log "Executing strategy '" + s.name + "'..."
+      #console.log "Executing strategy '" + s.name + "'..."
       iteration = s.create annotation, target
 
       # Run this strategy
       iteration.then( (anchor) => # This strategy has worked.
-#        console.log "Anchoring strategy '" + s.name + "' has succeeded:",
-#          anchor
+        #console.log "Anchoring strategy '" + s.name + "' has succeeded:",
+        #  anchor
 
         # Note the name of the successful strategy
         anchor.strategy = s
@@ -454,8 +455,11 @@ class Annotator extends Delegator
 
     # Build a filter to test targets with.
     shouldDo = (target) =>
-      (not this._hasAnchorForTarget annotation, target) and # has no ancher
-        (targetFilter target)  # Passes the optional filter
+      hasAnchor = this._hasAnchorForTarget annotation, target
+      result = (not hasAnchor) and  # has no ancher
+        (targetFilter target)       # Passes the optional filter
+      # console.log "Should I anchor target", target, "?", result
+      result
 
     annotation.quote = (t.quote for t in annotation.target)
     annotation.anchors ?= []
@@ -732,6 +736,20 @@ class Annotator extends Delegator
       this.startViewerHideTimer()
     @mouseIsDown = true
 
+
+  # This is called to create a target from a raw selection,
+  # using selectors created by the registered selector creators
+  _getTargetFromSelection: (selection) =>
+    selectors = []
+    for c in @selectorCreators
+      description = c.describe selection
+      for selector in description
+        selectors.push selector
+
+    # Create the target
+    source: @getHref()
+    selector: selectors
+
   # This method is to be called by the mechanisms responsible for
   # triggering annotation (and highlight) creation.
   #
@@ -750,8 +768,8 @@ class Annotator extends Delegator
     # Check whether we got a proper event
     unless event?
       throw new Error "Called onSuccessfulSelection without an event!"
-    unless event.targets?
-      throw new Error "Called onSuccessulSelection with an event with missing targets!"
+    unless event.segments?
+      throw "Called onSuccessulSelection with an event with missing segments!"
 
     # Are we allowed to create annotations?
     unless @canAnnotate
@@ -759,8 +777,8 @@ class Annotator extends Delegator
       #  @Annotator.Notification.INFO
       return false
 
-    # Store the selected targets
-    @selectedTargets = event.targets
+    # Describe the selection with targets
+    @selectedTargets = (@_getTargetFromSelection s for s in event.segments)
     @selectedData = event.annotationData
 
     # Do we want immediate annotation?
