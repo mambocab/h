@@ -4,7 +4,7 @@ class window.TextMapperCore
 
   CONTEXT_LEN = 32
 
-  constructor: (@id = "some mapper") ->
+  constructor: (@_id = "some mapper") ->
     @_createSyncAPI()
 
   # Create the _syncAPI field, used by the async API
@@ -19,7 +19,7 @@ class window.TextMapperCore
       getMappingsForCharRanges: @_getMappingsForCharRanges
       getPageIndexForPos: @_getPageIndexForPos
 
-  timestamp: -> new Date().getTime()
+  _timestamp: -> new Date().getTime()
 
   # Call this fnction to wait for any pending operations
   ready: (reason, callback) ->
@@ -63,5 +63,5 @@ class window.TextMapperCore
   _getMappingsForCharRange: -> throw new Error "not implemented"
   _getPageIndexForPos: -> throw new Error "not implemented"
 
-  log: (msg...) ->
-    console.log @id, ":", msg...
+  _log: (msg...) ->
+    console.log @_id, ":", msg...

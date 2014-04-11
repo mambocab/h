@@ -15,10 +15,10 @@ class window.DomTextMapper extends TextMapperCore
 
   @instances: 0
 
-  constructor: (@options = {})->
-    super(@options.id ? "d-t-m #" + DomTextMapper.instances)
-    if @options.rootNode?
-      @setRootNode @options.rootNode
+  constructor: (@_options = {})->
+    super(@_options.id ? "d-t-m #" + DomTextMapper.instances)
+    if @_options.rootNode?
+      @setRootNode @_options.rootNode
     else
       @setRealRoot()
     DomTextMapper.instances += 1
@@ -29,8 +29,8 @@ class window.DomTextMapper extends TextMapperCore
   # 
   # This will be the root node to use for all operations.
   setRootNode: (rootNode) ->
-    @rootWin = window
-    @pathStartNode = @_changeRootNode rootNode
+    @_rootWin = window
+    @_pathStartNode = @_changeRootNode rootNode
 
   # Consider only the sub-tree beginning with the node whose ID was given.
   # 
@@ -44,29 +44,29 @@ class window.DomTextMapper extends TextMapperCore
     iframe = window.document.getElementById iframeId
     unless iframe?
       throw new Error "Can't find iframe with specified ID!"
-    @rootWin = iframe.contentWindow
-    unless @rootWin?
+    @_rootWin = iframe.contentWindow
+    unless @_rootWin?
       throw new Error "Can't access contents of the specified iframe!"
-    @_changeRootNode @rootWin.document
-    @pathStartNode = @getBody()
+    @_changeRootNode @_rootWin.document
+    @_pathStartNode = @_getBody()
 
   # Work with the whole DOM tree
   # 
   # (This is the default; you only need to call this, if you have configured
   # a different root earlier, and now you want to restore the default setting.)
   setRealRoot: ->
-    @rootWin = window
+    @_rootWin = window
     @_changeRootNode document
-    @pathStartNode = @getBody() 
+    @_pathStartNode = @_getBody() 
 
   setExpectedContent: (content) ->
     @expectedContent = content
 
   # Select the given path (for visual identification),
   # and optionally scroll to it
-  selectPath: (path, scroll = false) ->
-    node = @lookUpNode path
-    @selectNode node, scroll
+  _selectPath: (path, scroll = false) ->
+    node = @_lookUpNode path
+    @_selectNode node, scroll
 
   # Get the matching DOM elements for a given charRange
   #
@@ -76,7 +76,7 @@ class window.DomTextMapper extends TextMapperCore
     unless (start? and end?)
       throw new Error "start and end is required!"
 
-    #@log "Collecting nodes for [" + start + ":" + end + "]"
+    #@_log "Collecting nodes for [" + start + ":" + end + "]"
 
     # Collect all the text nodes
     nodes = @_collectAllTextNodes()
@@ -126,12 +126,12 @@ class window.DomTextMapper extends TextMapperCore
     @_restoreSelection()
 
     # Collect the matching nodes
-    #@log "Collecting mappings"
+    #@_log "Collecting mappings"
     mappings = []
     for i, info of pcs when @_regions_overlap info.start, info.end, start, end
       do (info) =>
-#        @log "Checking " + info.path
-#        @log info
+#        @_log "Checking " + info.path
+#        @_log info
         mapping =
           element: info
 
@@ -156,36 +156,36 @@ class window.DomTextMapper extends TextMapperCore
               mapping.wanted = info.content.substr mapping.start,
                   mapping.end - mapping.start
 
-            @computeSourcePositions mapping
+            @_computeSourcePositions mapping
             mapping.yields = info.node.data.substr mapping.startCorrected,
                 mapping.endCorrected - mapping.startCorrected
           else if (info.node.nodeType is Node.ELEMENT_NODE) and
               (info.node.tagName.toLowerCase() is "img")
-            @log "Can not select a sub-string from the title of an image.
+            @_log "Can not select a sub-string from the title of an image.
  Selecting all."
             mapping.full = true
             mapping.wanted = info.content
           else
-            @log "Warning: no idea how to handle partial mappings
+            @_log "Warning: no idea how to handle partial mappings
  for node type " + info.node.nodeType
-            if info.node.tagName? then @log "Tag: " + info.node.tagName
-            @log "Selecting all."
+            if info.node.tagName? then @_log "Tag: " + info.node.tagName
+            @_log "Selecting all."
             mapping.full = true
             mapping.wanted = info.content
 
         mappings.push mapping
-#        @log "Done with " + info.path
+#        @_log "Done with " + info.path
 
     if mappings.length is 0
-      @log "Collecting nodes for [" + start + ":" + end + "]"
-      @log "Should be: '" + @_corpus[ start ... end ] + "'."
+      @_log "Collecting nodes for [" + start + ":" + end + "]"
+      @_log "Should be: '" + @_corpus[ start ... end ] + "'."
       throw new Error "No mappings found for [" + start + ":" + end + "]!"
 
     mappings = mappings.sort (a, b) -> a.element.start - b.element.start
         
     # Create a DOM range object
-#    @log "Building range..."
-    r = @rootWin.document.createRange()
+#    @_log "Building range..."
+    r = @_rootWin.document.createRange()
     startMapping = mappings[0]
     startNode = startMapping.element.node
     startPath = startMapping.element.path = @_getPathTo startNode
@@ -242,9 +242,9 @@ class window.DomTextMapper extends TextMapperCore
   # Update the corpus
   _getFreshCorpus: (shouldRestoreSelection = true,
       intermittent = false) ->
-    #@log "Recalculating corpus."
+    #@_log "Recalculating corpus."
 
-    newCorpus = @_getNodeContent @pathStartNode, shouldRestoreSelection
+    newCorpus = @_getNodeContent @_pathStartNode, shouldRestoreSelection
 
     # If this is an intermittent check, just return
     return newCorpus if intermittent
@@ -356,7 +356,7 @@ class window.DomTextMapper extends TextMapperCore
 
 
   _collectAllTextNodes: (node = null, results = []) ->
-    node ?= @pathStartNode
+    node ?= @_pathStartNode
     switch node.nodeType
       when Node.TEXT_NODE
         results.push node
@@ -365,7 +365,7 @@ class window.DomTextMapper extends TextMapperCore
           for n in node.childNodes
             @_collectAllTextNodes n, results
       else
-        @log "Ignoring node type", node.nodeType
+        @_log "Ignoring node type", node.nodeType
     results
 
   _parentPath: (path) -> path.substr 0, path.lastIndexOf "/"
@@ -396,67 +396,67 @@ class window.DomTextMapper extends TextMapperCore
     unless origNode = node
       throw new Error "Called getPathTo with null node!"
     xpath = '';
-    while node != @rootNode
+    while node != @_rootNode
       unless node?
-        @log "Root node:", @rootNode
-        @log "Wanted node:", origNode
-        @log "Is this even a child?", @rootNode.contains origNode
+        @_log "Root node:", @_rootNode
+        @_log "Wanted node:", origNode
+        @_log "Is this even a child?", @_rootNode.contains origNode
         throw new Error "Called getPathTo on a node which was not a descendant of the configured root node."
       xpath = (@_getPathSegment node) + '/' + xpath
       node = node.parentNode
-    xpath = (if @rootNode.ownerDocument? then './' else '/') + xpath
+    xpath = (if @_rootNode.ownerDocument? then './' else '/') + xpath
     xpath = xpath.replace /\/$/, ''
     xpath
 
-  getBody: -> (@rootWin.document.getElementsByTagName "body")[0]
+  _getBody: -> (@_rootWin.document.getElementsByTagName "body")[0]
 
   _regions_overlap: (start1, end1, start2, end2) ->
       start1 < end2 and start2 < end1
 
-  lookUpNode: (path) ->
-    doc = @rootNode.ownerDocument ? @rootNode
-    results = doc.evaluate path, @rootNode, null, 0, null
+  _lookUpNode: (path) ->
+    doc = @_rootNode.ownerDocument ? @_rootNode
+    results = doc.evaluate path, @_rootNode, null, 0, null
     node = results.iterateNext()
 
   # save the original selection
   _saveSelection: ->
-    if @savedSelection?
-      @log "Selection saved at:"
-      @log @selectionSaved
+    if @_savedSelection?
+      @_log "Selection saved at:"
+      @_log @_selectionSaved
       throw new Error "Selection already saved!"
-    sel = @rootWin.getSelection()
-    #@log "Saving selection: " + sel.rangeCount + " ranges."
+    sel = @_rootWin.getSelection()
+    #@_log "Saving selection: " + sel.rangeCount + " ranges."
 
-    @savedSelection = for i in [0 ... sel.rangeCount]
+    @_savedSelection = for i in [0 ... sel.rangeCount]
       r = sel.getRangeAt i
       range: r
       endOffset: r.endOffset
 
-    @selectionSaved = (new Error "selection was saved here").stack
+    @_selectionSaved = (new Error "selection was saved here").stack
 
   # restore selection
   _restoreSelection: ->
-    #@log "Restoring selection: " + @savedSelection.length + " ranges."
-    unless @savedSelection? then throw new Error "No selection to restore."
-    sel = @rootWin.getSelection()
+    #@_log "Restoring selection: " + @_savedSelection.length + " ranges."
+    unless @_savedSelection? then throw new Error "No selection to restore."
+    sel = @_rootWin.getSelection()
     sel.removeAllRanges()
-    for r in @savedSelection
+    for r in @_savedSelection
       r.range.setEnd r.range.endContainer, r.endOffset
       sel.addRange r.range
-    delete @savedSelection
+    delete @_savedSelection
 
   # Select the given node (for visual identification),
   # and optionally scroll to it
-  selectNode: (node, scroll = false) ->
+  _selectNode: (node, scroll = false) ->
     unless node?
       throw new Error "Called selectNode with null node!"
-    sel = @rootWin.getSelection()
+    sel = @_rootWin.getSelection()
 
     # clear the selection
     sel.removeAllRanges()
 
     # create our range, and select it
-    realRange = @rootWin.document.createRange()
+    realRange = @_rootWin.document.createRange()
 
     # There is some weird, bogus behaviour in Chrome,
     # triggered by whitespaces between the table tag and it's children.
@@ -481,7 +481,7 @@ class window.DomTextMapper extends TextMapperCore
       sel.addRange realRange
     else
       if USE_TABLE_TEXT_WORKAROUND and node.nodeType is Node.TEXT_NODE and
-          @isWhitespace node
+          @_isWhitespace node
         # This is a text element that should not even be here.
         # Selecting it might select the whole table,
         # so we don't select anything
@@ -495,11 +495,11 @@ class window.DomTextMapper extends TextMapperCore
           # This might be caused by the fact that FF can't select a
           # TextNode containing only whitespace.
           # If this is the case, then it's OK.
-          unless USE_EMPTY_TEXT_WORKAROUND and @isWhitespace node
+          unless USE_EMPTY_TEXT_WORKAROUND and @_isWhitespace node
             # No, this is not the case. Then this is an error.
-            @log "Warning: failed to scan element @ " + @underTraverse
-            @log "Content is: " + node.innerHTML
-            @log "We won't be able to properly anchor to any text inside this element."
+            @_log "Warning: failed to scan element @ " + @underTraverse
+            @_log "Content is: " + node.innerHTML
+            @_log "We won't be able to properly anchor to any text inside this element."
 #            throw exception
     if scroll
       sn = node
@@ -508,12 +508,12 @@ class window.DomTextMapper extends TextMapperCore
       if sn?
         sn.scrollIntoViewIfNeeded()
       else
-        @log "Failed to scroll to element. (Browser does not support scrollIntoViewIfNeeded?)"
+        @_log "Failed to scroll to element. (Browser does not support scrollIntoViewIfNeeded?)"
     sel
 
   # Read and convert the text of the current selection.
-  readSelectionText: (sel) ->
-    sel or= @rootWin.getSelection()
+  _readSelectionText: (sel) ->
+    sel or= @_rootWin.getSelection()
     sel.toString().trim().replace(/\n/g, " ").replace /\s{2,}/g, " "
 
   # Read the "text content" of a sub-tree of the DOM by
@@ -521,27 +521,27 @@ class window.DomTextMapper extends TextMapperCore
   _getNodeSelectionText: (node, shouldRestoreSelection = true) ->
     if shouldRestoreSelection then @_saveSelection()
 
-    sel = @selectNode node
-    text = @readSelectionText sel
+    sel = @_selectNode node
+    text = @_readSelectionText sel
 
     if shouldRestoreSelection then @_restoreSelection()
     text
 
 
   # Convert "display" text indices to "source" text indices.
-  computeSourcePositions: (match) ->
-#    @log "In computeSourcePosition",
+  _computeSourcePositions: (match) ->
+#    @_log "In computeSourcePosition",
 #      match.element.path,
 #      match.element.node.data
 
     # the HTML source of the text inside a text element.
-#    @log "Calculating source position at " + match.element.path
+#    @_log "Calculating source position at " + match.element.path
     sourceText = match.element.node.data.replace /\n/g, " "
-#    @log "sourceText is '" + sourceText + "'"
+#    @_log "sourceText is '" + sourceText + "'"
 
     # what gets displayed, when the node is processed by the browser.
     displayText = match.element.content
-#    @log "displayText is '" + displayText + "'"
+#    @_log "displayText is '" + displayText + "'"
 
     if displayText.length > sourceText.length
       throw new Error "Invalid match at" + match.element.path + ": sourceText is '" + sourceText + "'," +
@@ -550,13 +550,13 @@ class window.DomTextMapper extends TextMapperCore
     # The selected charRange in displayText.
     displayStart = if match.start? then match.start else 0
     displayEnd = if match.end? then match.end else displayText.length
-#    @log "Display charRange is: " + displayStart + "-" + displayEnd
+#    @_log "Display charRange is: " + displayStart + "-" + displayEnd
 
     if displayEnd is 0
       # Handle empty text nodes  
       match.startCorrected = 0
       match.endCorrected = 0
-#      @log "This is empty. Returning"
+#      @_log "This is empty. Returning"
       return
 
     sourceIndex = 0
@@ -575,7 +575,7 @@ class window.DomTextMapper extends TextMapperCore
       sourceIndex++
     match.startCorrected = sourceStart
     match.endCorrected = sourceEnd
-#    @log "computeSourcePosition done. Corrected charRange is: ",
+#    @_log "computeSourcePosition done. Corrected charRange is: ",
 #      match.startCorrected + "-" + match.endCorrected
     null
 
@@ -583,8 +583,8 @@ class window.DomTextMapper extends TextMapperCore
   # as render by the browser.
   # The current implementation uses the browser selection API to do so.
   _getNodeContent: (node, shouldRestoreSelection = true) ->
-    if (node is @pathStartNode) and @expectedContent?
-#      @log "Returning fake expectedContent for getNodeContent"
+    if (node is @_pathStartNode) and @expectedContent?
+#      @_log "Returning fake expectedContent for getNodeContent"
       return @expectedContent
 
     @_getNodeSelectionText node, shouldRestoreSelection
@@ -592,14 +592,14 @@ class window.DomTextMapper extends TextMapperCore
   WHITESPACE = /^\s*$/
 
   # Decides whether a given node is a text node that only contains whitespace
-  isWhitespace: (node) ->
+  _isWhitespace: (node) ->
     result = switch node.nodeType
       when Node.TEXT_NODE
         WHITESPACE.test node.data
       when Node.ELEMENT_NODE
         mightBeEmpty = true
         for child in node.childNodes
-          mightBeEmpty = mightBeEmpty and @isWhitespace child
+          mightBeEmpty = mightBeEmpty and @_isWhitespace child
         mightBeEmpty
       else false
     result
@@ -607,7 +607,7 @@ class window.DomTextMapper extends TextMapperCore
   # Fake two-phase / pagination support, used for HTML documents
   getPageIndex: -> 0
   getPageCount: -> 1
-  getPageRoot: -> @rootNode
+  getPageRoot: -> @_rootNode
   _getPageIndexForPos: -> 0
   isPageMapped: -> true
 
@@ -616,12 +616,12 @@ class window.DomTextMapper extends TextMapperCore
   # Get the list of nodes that should be totally ignored
   _getIgnoredParts: ->
    # Do we have to ignore some parts?
-    if @options.getIgnoredParts # Yes, some parts should be ignored.
+    if @_options.getIgnoredParts # Yes, some parts should be ignored.
       # Do we already have them, and are we allowed to cache?
-      if @_ignoredParts and @options.cacheIgnoredParts # Yes, in cache
+      if @_ignoredParts and @_options.cacheIgnoredParts # Yes, in cache
         @_ignoredParts
       else # No cache (yet?). Get a new list!
-        @_ignoredParts = @options.getIgnoredParts()
+        @_ignoredParts = @_options.getIgnoredParts()
     else # Not ignoring anything; facing reality as it is
       []
 
@@ -636,16 +636,16 @@ class window.DomTextMapper extends TextMapperCore
   # or being irrelevant by nature, if this option is allowed.
   _isIgnored: (node, ignoreIrrelevant = false, debug = false) ->
     # Don't bother with totally removed nodes
-    unless @pathStartNode.contains node
+    unless @_pathStartNode.contains node
       if debug
-        @log "Node", node, "is ignored, because it's not a descendant of",
-          @pathStartNode, "."
+        @_log "Node", node, "is ignored, because it's not a descendant of",
+          @_pathStartNode, "."
       return true
 
     for container in @_getIgnoredParts()
       if container.contains node
         if debug
-          @log "Node", node, "is ignore, because it's a descendant of",
+          @_log "Node", node, "is ignore, because it's a descendant of",
             container
         return true
 
@@ -653,12 +653,12 @@ class window.DomTextMapper extends TextMapperCore
     if ignoreIrrelevant
       if @_isIrrelevant node
         if debug
-          @log "Node", node, "is ignored, because it's irrelevant."
+          @_log "Node", node, "is ignored, because it's irrelevant."
         return true
 
     # OK, we have found no excuse to ignore this node.
     if debug
-      @log "Node", node, "is NOT ignored."
+      @_log "Node", node, "is NOT ignored."
     false
 
 
@@ -689,7 +689,7 @@ class window.DomTextMapper extends TextMapperCore
 #    return @_ignorePos if @_ignorePos?
 
     @_saveSelection()
-    @_ignorePos = @_findFirstIgnoredPositionInNode @pathStartNode
+    @_ignorePos = @_findFirstIgnoredPositionInNode @_pathStartNode
     @_restoreSelection()
 
     delete @_dirty
@@ -709,10 +709,10 @@ class window.DomTextMapper extends TextMapperCore
 
     # If there was a corpus change, announce it
     if @_corpus isnt oldCorpus then setTimeout =>
-#      @log "CORPUS HAS CHANGED"
+#      @_log "CORPUS HAS CHANGED"
       event = document.createEvent "UIEvents"
       event.initUIEvent "corpusChange", true, false, window, 0
-      @rootNode.dispatchEvent event
+      @_rootNode.dispatchEvent event
 
   # Change the root node, and subscribe to the events
   _changeRootNode: (node) ->
@@ -721,4 +721,4 @@ class window.DomTextMapper extends TextMapperCore
       callback: @_onMutation
       rootNode: node
       queries: [ all: true ]
-    @rootNode = node
+    @_rootNode = node
