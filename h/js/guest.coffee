@@ -19,6 +19,9 @@ class Annotator.Guest extends Annotator
           "div.annotator-adder"
         ].join ", "
     TextAnchors: {}
+    TextRange: {}
+    TextPosition: {}
+    TextQuote: {}
     FuzzyTextAnchors: {}
     PDF: {}
     Document: {}
@@ -260,11 +263,12 @@ class Annotator.Guest extends Annotator
     return confirm "You have selected a very short piece of text: only " + length + " chars. Are you sure you want to highlight this?"
 
   onSuccessfulSelection: (event, immediate) ->
-    # Store the selected targets
+    # Describe the selection with targets
 
-    @selectedTargets = event.targets
-    @selectedData = event.annotationData
     if @tool is 'highlight'
+
+      @selectedTargets = (@_getTargetFromSelection(s) for s in event.segments)
+      @selectedData = event.annotationData
 
       # Are we allowed to create annotations? Return false if we can't.
       unless @canAnnotate
@@ -432,6 +436,9 @@ class Annotator.Guest extends Annotator
     # Show a temporary highlight so the user can see what they selected
     # Also extract the quotation and serialize the ranges
     this.setupAnnotation(this.createAnnotation()).then (annotation) =>
+
+      if annotation in this.orphans
+        console.log "Uh-oh. I could not anchor this annotation. Expect trouble."
 
       hl.setTemporary(true) for hl in @getHighlights([annotation])
 
