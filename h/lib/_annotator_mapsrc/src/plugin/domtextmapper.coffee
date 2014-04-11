@@ -36,9 +36,9 @@ class Annotator.Plugin.DomTextMapper extends Annotator.Plugin
           dfd.promise()
 
         options.rootNode.addEventListener "corpusChange", =>
-          t0 = mapper.timestamp()
+          t0 = mapper._timestamp()
           @annotator._reanchorAllAnnotations("corpus change").then ->
-            t1 = mapper.timestamp()
+            t1 = mapper._timestamp()
 #            console.log "corpus change -> refreshed text annotations.",
 #              "Time used: ", t1-t0, "ms"
         mapper
