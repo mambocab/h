@@ -60,7 +60,7 @@ class window.DomTextMapper extends TextMapperCore
     @_pathStartNode = @_getBody() 
 
   setExpectedContent: (content) ->
-    @expectedContent = content
+    @_expectedContent = content
 
   # Select the given path (for visual identification),
   # and optionally scroll to it
@@ -583,11 +583,16 @@ class window.DomTextMapper extends TextMapperCore
   # as render by the browser.
   # The current implementation uses the browser selection API to do so.
   _getNodeContent: (node, shouldRestoreSelection = true) ->
-    if (node is @_pathStartNode) and @expectedContent?
+    content = @_getNodeSelectionText node, shouldRestoreSelection
+    if (node is @_pathStartNode) and @_expectedContent?
 #      @_log "Returning fake expectedContent for getNodeContent"
-      return @expectedContent
+      @_log "I should find out how to make actual content fit the expectations"
 
-    @_getNodeSelectionText node, shouldRestoreSelection
+      # TODO: do a smarter mapping here, which can handle char changes.
+      content = @_expectedContent
+
+    # Return the content
+    content
 
   WHITESPACE = /^\s*$/
 

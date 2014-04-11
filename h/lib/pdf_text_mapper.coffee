@@ -5,7 +5,7 @@ class window.PDFTextMapper extends window.PageTextMapperCore
   # Are we working with a PDF document?
   @applicable: -> PDFView?.initialized ? false
 
-  requiresSmartStringPadding: true
+  _requiresSmartStringPadding: true
 
   # Get the number of pages
   getPageCount: -> PDFView.pages.length
@@ -21,21 +21,21 @@ class window.PDFTextMapper extends window.PageTextMapperCore
     return PDFView.pages[index]?.textLayer?.renderingDone
 
   # Get the root DOM node of a given page
-  getRootNodeForPage: (index) ->
+  getPageRoot: (index) ->
     PDFView.pages[index].textLayer.textLayerDiv
 
   constructor: ->
-    @setEvents()
+    @_setEvents()
     super
 
   # Install watchers for various events to detect page rendering/unrendering
-  setEvents: ->
+  _setEvents: ->
     # Detect page rendering
     addEventListener "pagerender", (evt) =>
 
       # If we have not yet finished the initial scanning, then we are
       # not interested.
-      return unless @pageInfo?
+      return unless @_pageInfo?
 
       index = evt.detail.pageNumber - 1
       @_onPageRendered index
@@ -47,19 +47,20 @@ class window.PDFTextMapper extends window.PageTextMapperCore
         index = parseInt node.parentNode.id.substr(13) - 1
 
         # Forget info about the new DOM subtree
-        @_unmapPage @pageInfo[index]
+        @_unmapPage @_pageInfo[index]
 
     $(PDFView.container).on 'scroll', => @_onScroll()
 
   _extractionPattern: /[ ]+/g
-  _parseExtractedText: (text) => text.replace @_extractionPattern, " "
+  _parseExtractedText: (text) =>
+    text.replace(@_extractionPattern, " ").trim()
 
   # Update mapper data
   _startScan: (reason) ->
     return if @_pendingScan
     @_pendingScan = true
 
-    if @pageInfo
+    if @_pageInfo
       @_readyAllPages reason, => @_scanFinished()
     else
       @_startPDFTextExtraction reason
@@ -77,7 +78,7 @@ class window.PDFTextMapper extends window.PageTextMapperCore
     PDFView.getPage(1).then =>
       console.log "Scanning PDF document for text, because", reason
 
-      @pageInfo = []
+      @_pageInfo = []
       @_extractPDFPageText 0
 
   # Get a promise wrapper around ready()
@@ -109,7 +110,7 @@ class window.PDFTextMapper extends window.PageTextMapperCore
       content = @_parseExtractedText rawContent
 
       # Save the extracted content to our page information registery
-      @pageInfo[pageIndex] = content: content
+      @_pageInfo[pageIndex] = content: content
 
       if pageIndex is PDFView.pages.length - 1 # scanning is finished
         # Do some besic calculations with the content
@@ -140,4 +141,4 @@ class window.PDFTextMapper extends window.PageTextMapperCore
     index = parseInt div.parentNode.id.substr(13) - 1
 
     # Look up the page
-    @pageInfo[index]
+    @_pageInfo[index]

@@ -3,51 +3,48 @@ class window.PageTextMapperCore extends TextMapperCore
 
   # Get the page index for a given character position
   _getPageIndexForPos: (pos) =>
-    for info in @pageInfo
+    for info in @_pageInfo
       if info.start <= pos < info.end
         return info.index
-        @log "Not on page " + info.index
+        @_log "Not on page " + info.index
     return -1
-
-  # Return the root node for a given page
-  getPageRoot: (index) -> @getRootNodeForPage index
 
   # A new page was rendered
   _onPageRendered: (index) =>
-    #@log "Allegedly rendered page #" + index
+    #@_log "Allegedly rendered page #" + index
 
     # Is it really rendered?
     unless @_isPageRendered index
-    #@log "Page #" + index + " is not really rendered yet."
+    #@_log "Page #" + index + " is not really rendered yet."
       setTimeout (=> @_onPageRendered index), 1000
       return
 
     # Collect info about the new DOM subtree
-    @_mapPage @pageInfo[index], "page has been rendered"
+    @_mapPage @_pageInfo[index], "page has been rendered"
 
   # Determine whether a given page has been rendered and mapped
   isPageMapped: (index) ->
-    return @pageInfo[index]?.domMapper?
+    return @_pageInfo[index]?.domMapper?
 
    # Create the mappings for a given page    
   _mapPage: (info, reason) ->
-    info.node = @getRootNodeForPage info.index        
+    info.node = @getPageRoot info.index
     info.domMapper = new DomTextMapper
       id: "d-t-m for page #" + info.index
       rootNode: info.node
-    if @requiresSmartStringPadding
+    if @_requiresSmartStringPadding
       info.domMapper.setExpectedContent info.content
     info.domMapper.ready reason, (s) =>
       renderedContent = s.getCorpus()
       if renderedContent isnt info.content
-        @log "Oops. Mismatch between rendered and extracted text, while mapping page #" + info.index + "!"
+        @_log "Oops. Mismatch between rendered and extracted text, while mapping page #" + info.index + "!"
         console.trace()
-        @log "Rendered: " + renderedContent
-        @log "Extracted: " + info.content
+        @_log "Rendered: " + renderedContent
+        @_log "Extracted: " + info.content
 
       info.node.addEventListener "corpusChange", =>
-        @log "Ooops. Corpus has changed on one of the pages!"
-        @log "TODO: We should do something about this, to update the global corpus!"
+        @_log "Ooops. Corpus has changed on one of the pages!"
+        @_log "TODO: We should do something about this, to update the global corpus!"
 
       # Announce the newly available page
       setTimeout ->
@@ -68,7 +65,7 @@ class window.PageTextMapperCore extends TextMapperCore
     endTriggered = false
 
     # Go over all the pages
-    @pageInfo.forEach (info, i) =>
+    @_pageInfo.forEach (info, i) =>
       if @_isPageRendered i
         pagesToGo++
         info.domMapper.ready reason, =>
@@ -98,31 +95,46 @@ class window.PageTextMapperCore extends TextMapperCore
     window.dispatchEvent event
 
   # Look up info about a give DOM node, uniting page and node info
-  _getInfoForNode: (node) =>
+  _getStartInfoForNode: (node) =>
     pageData = @_getPageForNode node
-    nodeData = pageData.domMapper._getInfoForNode node
+    nodeData = pageData.domMapper._getStartInfoForNode node
+    return null unless nodeData
     # Copy info about the node
     info = {}
     for k,v of nodeData
       info[k] = v
     # Correct the chatacter offsets with that of the page
     info.start += pageData.start
+    info.pageIndex = pageData.index
+    info
+
+
+  # Look up info about a give DOM node, uniting page and node info
+  _getEndInfoForNode: (node) =>
+    pageData = @_getPageForNode node
+    nodeData = pageData.domMapper._getEndInfoForNode node
+    return null unless nodeData
+    # Copy info about the node
+    info = {}
+    for k,v of nodeData
+      info[k] = v
+    # Correct the chatacter offsets with that of the page
     info.end += pageData.start
     info.pageIndex = pageData.index
     info
 
   # Return some data about a given character range
   _getMappingsForCharRange: (start, end, pages) =>
-    #@log "Get mappings for char range [" + start + "; " + end + "], for pages " + pages + "."
+    #@_log "Get mappings for char range [" + start + "; " + end + "], for pages " + pages + "."
 
     # Check out which pages are these on
     startIndex = @_getPageIndexForPos start
     endIndex = @_getPageIndexForPos end
-    #@log "These are on pages [" + startIndex + ".." + endIndex + "]."
+    #@_log "These are on pages [" + startIndex + ".." + endIndex + "]."
 
     # Function to get the relevant section inside a given page
     getSection = (index) =>
-      info = @pageInfo[index]
+      info = @_pageInfo[index]
 
       # Calculate in-page offsets
       realStart = (Math.max info.start, start) - info.start
@@ -143,11 +155,11 @@ class window.PageTextMapperCore extends TextMapperCore
   # Call this in scan, when you have the page contents
   _onHavePageContents: ->
     # Join all the text together
-    @_corpus = (info.content for info in @pageInfo).join " "
+    @_corpus = (info.content for info in @_pageInfo).join " "
 
     # Go over the pages, and calculate some basic info
     pos = 0
-    @pageInfo.forEach (info, i) =>
+    @_pageInfo.forEach (info, i) =>
       info.index = i
       info.len = info.content.length        
       info.start = pos
@@ -156,11 +168,11 @@ class window.PageTextMapperCore extends TextMapperCore
   # Call this in scan, after resolving the promise  
   _onAfterTextExtraction: ->
     # Go over the pages again, and map the rendered ones
-    @pageInfo.forEach (info, i) =>
+    @_pageInfo.forEach (info, i) =>
       if @_isPageRendered i
         @_mapPage info, "text extraction finished"
 
   # Test all the mappings on all pages
   _testAllMappings: ->
-    @pageInfo.forEach (info, i) =>
+    @_pageInfo.forEach (info, i) =>
       info.domMapper?._testAllMappings?()
