@@ -10,13 +10,10 @@ class window.TextMapperCore
   # Create the _syncAPI field, used by the async API
   _createSyncAPI: ->
     @_syncAPI =
-      getInfoForNode: @_getInfoForNode
-      getDocLength: =>
-        @_startScan "getDocLength()"
-        @_corpus.length
-      getCorpus: =>
-        @_startScan "getCorpus()"
-        @_corpus
+      getStartInfoForNode: @_getStartInfoForNode
+      getEndInfoForNode: @_getEndInfoForNode
+      getDocLength: => @_corpus.length
+      getCorpus: => @_corpus
       getContextForCharRange: @_getContextForCharRange
       getMappingsForCharRange: @_getMappingsForCharRange
       getMappingsForCharRanges: @_getMappingsForCharRanges
@@ -46,7 +43,6 @@ class window.TextMapperCore
   # Get the context that encompasses the given charRange
   # in the rendered text of the document
   _getContextForCharRange: (start, end) =>
-    @_startScan "getContextForCharRange()"
     if start < 0
       throw Error "Negative range start (", start, ") is invalid!"
     if end > @_corpus.length
@@ -62,7 +58,8 @@ class window.TextMapperCore
   _getMappingsForCharRanges: (charRanges) =>
     (@_getMappingsForCharRange charRange.start, charRange.end) for charRange in charRanges
 
-  _getInfoForNode: -> throw new Error "not implemented"
+  _getStartPosForNode: -> throw new Error "not implemented"
+  _getEndPosForNode: -> throw new Error "not implemented"
   _getMappingsForCharRange: -> throw new Error "not implemented"
   _getPageIndexForPos: -> throw new Error "not implemented"
 
