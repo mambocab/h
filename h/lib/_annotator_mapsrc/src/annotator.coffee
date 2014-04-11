@@ -49,6 +49,7 @@ class DummyDocumentAccess
   getPageRoot: -> @rootNode
   getPageIndexForPos: -> 0
   isPageMapped: -> true
+  prepare: () ->
 
 class Annotator extends Delegator
   # Events to be bound on Annotator#element.

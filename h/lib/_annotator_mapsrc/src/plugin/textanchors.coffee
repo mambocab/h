@@ -142,7 +142,7 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
       verify: @verifyTextAnchor
 
     # Register the event handlers required for creating a selection
-    $(@annotator.wrapper).bind({
+    $(document).bind({
       "mouseup": @checkForEndSelection
     })
 
@@ -289,8 +289,8 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
 #
 #      console.log "Start info:", state.getInfoForNode rangeStart
 
-      startOffset = (state.getInfoForNode rangeStart).start
-      endOffset = (state.getInfoForNode rangeEnd).end
+      startOffset = (state.getStartInfoForNode rangeStart).start
+      endOffset = (state.getEndInfoForNode rangeEnd).end
       quote = state.getCorpus()[ startOffset ... endOffset ].trim()
       [prefix, suffix] = state.getContextForCharRange startOffset, endOffset
 
@@ -307,8 +307,8 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
 
   # Create a TextPositionSelector around a range
   _getTextPositionSelector: (range, state) ->
-    startOffset = (state.getInfoForNode range.start).start
-    endOffset = (state.getInfoForNode range.end).end
+    startOffset = (state.getStartInfoForNode range.start).start
+    endOffset = (state.getEndInfoForNode range.end).end
 
     type: "TextPositionSelector"
     start: startOffset
@@ -413,14 +413,14 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
         # When the d-t-m is ready, do this
 
         # determine the start position
-        startInfo = s.getInfoForNode normedRange.start
+        startInfo = s.getStartInfoForNode normedRange.start
         startOffset = startInfo.start
         unless startOffset?
           dfd.reject "the saved quote doesn't match"
           return dfd.promise()
 
         # determine the end position
-        endInfo = s.getInfoForNode normedRange.end
+        endInfo = s.getEndInfoForNode normedRange.end
         endOffset = endInfo.end
         unless endOffset?
           dfd.reject "the saved quote doesn't match"
