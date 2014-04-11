@@ -92,7 +92,6 @@ class window.DomTextMapper extends TextMapperCore
       origText = node.nodeValue             # Save the original text
       continue unless origText.length
 
-
       # Check the start
       origChar = origText[0]                # Get the first character
       # Choose a replacement character
@@ -251,27 +250,15 @@ class window.DomTextMapper extends TextMapperCore
     return newCorpus if intermittent
 
     # Let's see if there is a part which we should ignore
-    ignorePos = @_findFirstIgnoredPosition()
-    if ignorePos?
-      newCorpus = newCorpus[ ... ignorePos ]
 
-    # Remove any spaces from end (or start)
-    newCorpus = newCorpus.trim()
+    # We only want to do this (costy) calculation if there was a change
+    if @_isDirty()
+      @_ignorePos = @_findFirstIgnoredPosition()
 
-    # Now let's see if this is a change!
-    if @_corpus? and (@_corpus isnt newCorpus)
-      @log "Uh-oh. Has the corpus changed?"
-      @log "Diff @", index = @_getDiffIndex @_corpus, newCorpus
-      @log "Old version (", @_corpus.length, "chars):",
-        @_corpus.substr index - 10, 20
-      @log "New version (", newCorpus.length, "chars):",
-        newCorpus.substr index - 10, 20
+    if @_ignorePos?
+      newCorpus = newCorpus[ ... @_ignorePos ]
 
-    @_corpus = newCorpus
-
-    # Return the corpus
-    @_corpus
-
+    @_corpus = newCorpus.trim()
 
   # Find the first text node inside a given node
   _findFirstTextNode: (node) ->
@@ -705,15 +692,23 @@ class window.DomTextMapper extends TextMapperCore
     @_ignorePos = @_findFirstIgnoredPositionInNode @pathStartNode
     @_restoreSelection()
 
+    delete @_dirty
     @_ignorePos
+
+  # Are there any unreported changes in the DOM?
+  _isDirty: ->
+    x = @_observer.takeSummaries()
+    x? or @_dirty
 
   # Callback for the mutation observer
   _onMutation: (summaries) =>
-#    @log "DOM mutated!"
-    corpusChanged = false
+    @_dirty = true
+
+    oldCorpus = @_corpus
+    @_getFreshCorpus()
 
     # If there was a corpus change, announce it
-    if corpusChanged then setTimeout =>
+    if @_corpus isnt oldCorpus then setTimeout =>
 #      @log "CORPUS HAS CHANGED"
       event = document.createEvent "UIEvents"
       event.initUIEvent "corpusChange", true, false, window, 0
@@ -721,5 +716,9 @@ class window.DomTextMapper extends TextMapperCore
 
   # Change the root node, and subscribe to the events
   _changeRootNode: (node) ->
-    # TODO: Should set up a mutation observer to call onMutation on changes
+    @_observer?.disconnect()
+    @_observer = new MutationSummary
+      callback: @_onMutation
+      rootNode: node
+      queries: [ all: true ]
     @rootNode = node
