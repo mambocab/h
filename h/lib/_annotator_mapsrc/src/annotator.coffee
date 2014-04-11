@@ -968,6 +968,9 @@ class Annotator extends Delegator
     # Return a promise
     dfd.promise()
 
+  onAnchorMouseover: (event) ->
+    #console.log "Mouse over annotations:", event.data.getAnnotations event
+
     # Cancel any pending hiding of the viewer.
     this.clearViewerHideTimer()
 
