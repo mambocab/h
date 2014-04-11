@@ -18,22 +18,6 @@ class Annotator.Guest extends Annotator
           "div.annotator-frame"
           "div.annotator-adder"
         ].join ", "
-        filterAttributeChanges: (node, attributeName, oldValue, newValue) ->
-          return true unless attributeName is "class"
-          newClasses = if newValue then newValue.split " " else []
-          oldClasses = if oldValue then oldValue.split " " else []
-          addedClasses = (c for c in newClasses when c not in oldClasses)
-          removedClasses = (c for c in oldClasses when c not in newClasses)
-          changedClasses = addedClasses.concat removedClasses
-          if changedClasses.length is 1 and changedClasses[0] in [
-            'annotator-hl-active',
-            'annotator-hl-temporary'
-            'annotator-highlights-always-on'
-          ]
-            # We are just switching some highlights. Ignore this.
-            return false
-          else
-            true
     TextAnchors: {}
     FuzzyTextAnchors: {}
     PDF: {}
