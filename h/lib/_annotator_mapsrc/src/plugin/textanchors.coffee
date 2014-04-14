@@ -3,9 +3,6 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
 
   # Plugin initialization
   pluginInit: ->
-    # We need text highlights
-    unless @annotator.plugins.TextHighlights
-      throw new Error "The TextAnchors Annotator plugin requires the TextHighlights plugin."
 
     @Annotator = Annotator
     @$ = Annotator.$
@@ -71,6 +68,27 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
       selection.addRange(range.toRange()) if range
       range
 
+  # Verifies whether or not a given part of the DOM is supposed
+  # to be annotated. (Parts of the DOM which are part of annotator
+  # itself are not supposed to be annotated.)
+  isThisSupposedToBeAnnotated: (node) ->
+
+    # First, look up the real top container of this node,
+    # because some highlights might be in the way
+
+    goOn = true
+    while goOn
+      goOn = false
+      for h in @annotator.highlighters
+        if h.isInstance?(node)
+          node = h.getIndependentParent node
+          goOn = true
+          break
+
+    # Now that we know which element should we look at, check
+    # if it's part of Annotator
+    not @annotator.isAnnotator node
+
   # This is called then the mouse is released.
   # Checks to see if a selection has been made on mouseup and if so,
   # calls Annotator's onSuccessfulSelection method.
@@ -92,31 +110,26 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
     # Get the currently selected ranges.
     selectedRanges = @_getSelectedRanges()
 
-    for range in selectedRanges
-      container = range.commonAncestor
-      # TODO: what is selection ends inside a different type of highlight?
-      if @Annotator.TextHighlight.isInstance container
-        container = @Annotator.TextHighlight.getIndependentParent container
-      return if @annotator.isAnnotator(container)
-
-    if selectedRanges.length
-      event.segments = []
-      for r in selectedRanges
-        event.segments.push
-          type: "text range"
-          range: r
-
-      # Do we have valid page coordinates inside the event
-      # which has triggered this function?
-      unless event.pageX
-        # No, we don't. Adding fake coordinates
-        pos = selectedRanges[0].getEndCoords()
-        event.pageX = pos.x
-        event.pageY = pos.y #- window.scrollY
-
-      @annotator.onSuccessfulSelection event
-    else
+    # Return if nothing is selected
+    unless selectedRanges.length
       @annotator.onFailedSelection event
+      return
 
-  # Strategies used for creating anchors from saved data
+    # Check if it's legal to annotate these parts
+    for range in selectedRanges
+      return unless @isThisSupposedToBeAnnotated range.commonAncestor
+
+    # Put the selected segments into the event
+    event.segments = ({type: "text range", range: r} for r in selectedRanges)
+
+    # Do we have valid page coordinates inside the event
+    # which has triggered this function?
+    unless event.pageX
+      # No, we don't. Adding fake coordinates
+      pos = selectedRanges[0].getEndCoords()
+      event.pageX = pos.x
+      event.pageY = pos.y #- window.scrollY
+
+    # Notify annotator core about the successfull selection
+    @annotator.onSuccessfulSelection event
 

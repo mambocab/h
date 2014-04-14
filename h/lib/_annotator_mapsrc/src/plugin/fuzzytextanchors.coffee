@@ -2,13 +2,6 @@
 class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
 
   pluginInit: ->
-    # Do we have the basic text anchors plugin loaded?
-    unless @annotator.plugins.TextAnchors
-      throw "The FuzzyTextAnchors Annotator plugin requires the TextAnchors plugin."
-    unless @annotator.plugins.TextPosition
-      throw "The FuzzyTextAnchors Annotator plugin requires the TextPosition plugin."
-
-    @Annotator = Annotator
 
     # Initialize the text matcher library
     @textFinder = new DomTextMatcher => @annotator.domMapper.getCorpus()
@@ -63,13 +56,17 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
 
     # OK, we have everything
     # Create a TextPositionAnchor from this data
-    new @Annotator.TextPositionAnchor @annotator, annotation, target,
-      match.start, match.end,
-      (@annotator.domMapper.getPageIndexForPos match.start),
-      (@annotator.domMapper.getPageIndexForPos match.end),
-      match.found,
-      unless match.exact then match.comparison.diffHTML,
-      unless match.exact then match.exactExceptCase
+
+    type: "text position"
+    annotation: annotation
+    target: target
+    startPage: @annotator.domMapper.getPageIndexForPos match.start
+    endPage: @annotator.domMapper.getPageIndexForPos match.end
+    start: match.start
+    end: match.end
+    quote: match.found
+    diffHTML: unless match.exact then match.comparison.diffHTML
+    diffCaseOnly: unless match.exact then match.exactExceptCase
 
   fuzzyMatching: (annotation, target) =>
     # Fetch the quote
@@ -111,11 +108,14 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
 
     # OK, we have everything
     # Create a TextPosutionAnchor from this data
-    new @Annotator.TextPositionAnchor @annotator, annotation, target,
-      match.start, match.end,
-      (@annotator.domMapper.getPageIndexForPos match.start),
-      (@annotator.domMapper.getPageIndexForPos match.end),
-      match.found,
-      unless match.exact then match.comparison.diffHTML,
-      unless match.exact then match.exactExceptCase
 
+    type: "text position"
+    annotation: annotation
+    target: target
+    startPage: @annotator.domMapper.getPageIndexForPos match.start
+    endPage: @annotator.domMapper.getPageIndexForPos match.end
+    start: match.start
+    end: match.end
+    quote: match.found
+    diffHTML: unless match.exact then match.comparison.diffHTML
+    diffCaseOnly: unless match.exact then match.exactExceptCase

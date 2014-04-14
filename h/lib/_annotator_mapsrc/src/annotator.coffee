@@ -106,6 +106,7 @@ class Annotator extends Delegator
     @plugins = {}
     @selectorCreators = []
     @anchoringStrategies = []
+    @highlighters = []
 
     # Return early if the annotator is not supported.
     return this unless Annotator.supported()
@@ -236,9 +237,10 @@ class Annotator extends Delegator
   _setupAnchorEvents: ->
     # When annotations are updated
     @on 'annotationUpdated', (annotation) =>
-      # Notify the anchors
+      # Notify the highlights
       for anchor in annotation.anchors or []
-        anchor.annotationUpdated()
+        for index in [anchor.startPage .. anchor.endPage]
+          anchor.highlight[index]?.annotationUpdated()
 
   # Sets up any dynamically calculated CSS for the Annotator.
   #
@@ -342,6 +344,7 @@ class Annotator extends Delegator
       try
         a = s.code.call this, annotation, target
         if a
+          a.highlight = {}
 #          console.log "Strategy '" + s.name + "' yielded an anchor."
           return result: a
 #        else
@@ -354,6 +357,58 @@ class Annotator extends Delegator
           throw error
 
     return error: "No strategies worked."
+
+  # Create the missing highlights for this anchor
+  _realizeAnchor: (anchor) ->
+    return if anchor.fullyRealized # If we have everything, go home
+
+    # Collect the pages that are already rendered
+    renderedPages = [anchor.startPage .. anchor.endPage].filter (index) =>
+      @domMapper.isPageMapped index
+
+    # Collect the pages that are already rendered, but not yet anchored
+    pagesTodo = renderedPages.filter (index) => not anchor.highlight[index]?
+
+    return unless pagesTodo.length # Return if nothing to do
+
+    # Create the new highlights
+    created = for page in pagesTodo
+      anchor.highlight[page] = this._createHighlight anchor, page
+
+    # Check if everything is rendered now
+    anchor.fullyRealized = renderedPages.length is anchor.endPage - anchor.startPage + 1
+
+    # Announce the creation of the highlights
+    this.publish 'highlightsCreated', created
+
+
+  # Remove the highlights of an anchor for the given set of pages
+  _virtualizeAnchor: (anchor, pageIndex) =>
+    highlight = anchor.highlight[pageIndex]
+
+    return unless highlight? # No highlight for this page
+
+    highlight.removeFromDocument()
+
+    delete anchor.highlight[pageIndex]
+
+    # Mark this anchor as not fully rendered
+    anchor.fullyRealized = false
+
+    # Announce the removal of the highlight
+    this.publish 'highlightRemoved', highlight
+
+  # Virtualize and remove an anchor from all involved pages
+  _removeAnchor: (anchor) ->
+    # Go over all the pages
+    for index in [anchor.startPage .. anchor.endPage]
+      this._virtualizeAnchor anchor, index
+      anchors = @anchors[index]
+      # Remove the anchor from the list
+      i = anchors.indexOf anchor
+      anchors[i..i] = []
+      # Kill the list if it's empty
+      delete @anchors[index] unless anchors.length
 
   # Public: Initialises an annotation either from an object representation or
   # an annotation created with Annotator#createAnnotation(). It finds the
@@ -407,7 +462,7 @@ class Annotator extends Delegator
             @anchors[pageIndex].push anchor
 
           # Realizing the anchor
-          anchor.realize()
+          this._realizeAnchor anchor
 
         else
           console.log "Could not create anchor for annotation '",
@@ -453,7 +508,7 @@ class Annotator extends Delegator
   deleteAnnotation: (annotation) ->
     if annotation.anchors?    
       for a in annotation.anchors
-        a.remove()
+        this._removeAnchor a
 
     this.publish('annotationDeleted', [annotation])
     annotation
@@ -809,6 +864,15 @@ class Annotator extends Delegator
     # Delete highlight elements.
     this.deleteAnnotation annotation
 
+  # Create a highlight for an anchor, using one of the registered
+  # highlighting implementations.
+  _createHighlight: (anchor, page) ->
+    for h in @highlighters
+      result = h.highlight anchor, page
+      if result
+        return result
+    throw new Error "No highlighter that could handle anchor type" +anchor.type
+
   # Collect all the highlights (optionally for a given set of annotations)
   getHighlights: (annotations) ->
     results = []
@@ -831,13 +895,13 @@ class Annotator extends Delegator
 
     # Go over all anchors related to this page
     for anchor in @anchors[index] ? []
-      anchor.realize()
+      this._realizeAnchor anchor
 
   # Virtualize anchors on a given page
   _virtualizePage: (index) ->
     # Go over all anchors related to this page
     for anchor in @anchors[index] ? []
-      anchor.virtualize index
+      this._virtualizeAnchor anchor, index
 
   onAnchorMouseover: (event) ->
     #console.log "Mouse over annotations:", event.data.getAnnotations event
@@ -907,7 +971,6 @@ Annotator.util = util
 Annotator.Util = Util
 
 Annotator.Highlight = Highlight
-Annotator.Anchor = Anchor
 
 # Bind gettext helper so plugins can use localisation.
 Annotator._t = _t
