@@ -256,7 +256,7 @@ class Annotator.Guest extends Annotator
   confirmSelection: ->
     return true unless @selectedTargets.length is 1
 
-    quote = @plugins.TextAnchors.getQuoteForTarget @selectedTargets[0]
+    quote = this.getQuoteForTarget @selectedTargets[0]
 
     if quote.length > 2 then return true
 
@@ -267,42 +267,48 @@ class Annotator.Guest extends Annotator
 
     if @tool is 'highlight'
 
-      @selectedTargets = (@_getTargetFromSelection(s) for s in event.segments)
-      @selectedData = event.annotationData
+      # Prepare the deferred object
+      dfd = Annotator.$.Deferred()
 
       # Are we allowed to create annotations? Return false if we can't.
       unless @canAnnotate
-        #@Annotator.showNotification "You are already editing an annotation!",
-        #  @Annotator.Notification.INFO
-        return false
+        dfd.reject "I can't annotate right now. (Maybe already creating an annotation?)"
+        return dfd.promise()
 
-      # Do we really want to make this selection?
-      return false unless this.confirmSelection()
+      # Describe the selection with targets
+      this._getTargetsFromSelections(event.segments).then (targets) =>
+        @selectedTargets = targets
+        @selectedData = event.annotationData
 
-      # Add a flag about what's happening
-      @creatingHL = true
+        # Do we really want to make this selection?
+        unless this.confirmSelection()
+          dfd.reject "User refused creating this highlight."
+          return dfd.promise()
 
-      # Create the annotation right away
+        # Add a flag about what's happening
+        @creatingHL = true
 
-      # Don't use the default method to create an annotation,
-      # because we don't want to publish the beforeAnnotationCreated event
-      # just yet.
-      #
-      # annotation = this.createAnnotation()
-      #
-      # Create an empty annotation manually instead
-      annotation = {inject: true}
+        # Create the annotation right away
 
-      # If we have saved some data for this annotation, add it here
-      if @selectedData
-        @Annotator.$.extend annotation, @selectedData
-        delete @selectedData
+        # Don't use the default method to create an annotation,
+        # because we don't want to publish the beforeAnnotationCreated event
+        # just yet.
+        #
+        # annotation = this.createAnnotation()
+        #
+        # Create an empty annotation manually instead
+        annotation = {inject: true}
 
-      this.setupAnnotation(annotation).then =>
+        # If we have saved some data for this annotation, add it here
+        if @selectedData
+          @Annotator.$.extend annotation, @selectedData
+          delete @selectedData
 
-        # Notify listeners
-        this.publish 'beforeAnnotationCreated', annotation
-        this.publish 'annotationCreated', annotation
+        this.setupAnnotation(annotation).then =>
+
+          # Notify listeners
+          this.publish 'beforeAnnotationCreated', annotation
+          this.publish 'annotationCreated', annotation
     else
       super
 
