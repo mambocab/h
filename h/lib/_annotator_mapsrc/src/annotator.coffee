@@ -746,17 +746,25 @@ class Annotator extends Delegator
 
     # Call all selector creators
     promises = (for c in @selectorCreators
-      c.describe(selection).then (description) ->
-        for selector in description
-          selectors.push selector
+      try
+        c.describe(selection).then (description) ->
+          for selector in description
+            selectors.push selector
+      catch error
+        console.log "Internal error while using selection descriptor",
+          "'" + c.name + "':"
+        console.log error.stack
     )
 
     # Wait for all the descriptors to finish
     Annotator.$.when(promises...).always =>
-      # Create the target
-      dfd.resolve
-        source: @getHref()
-        selector: selectors
+      if selectors.length
+        # Create the target
+        dfd.resolve
+          source: @getHref()
+          selector: selectors
+      else
+        dfd.reject "No selector creator could describe this selection."
 
     # Return the promise
     dfd.promise()
@@ -771,15 +779,23 @@ class Annotator extends Delegator
 
     # Start the creation of the targets for each selection
     promises = (for selection in selections
-      this._getTargetFromSelection(selection).then (target) ->
+      this._getTargetFromSelection(selection).then(((target) ->
         targets[selection] = target
+      ), ((reason) ->
+        console.log "Could not create target from selection", selection,
+         ":", reason
+      ))
     )
 
     # Wait for all the pieces to finish
     Annotator.$.when(promises...).always =>
 
-      # Resolve the promise with the target list
-      dfd.resolve (targets[sel] for sel in selections)
+      # Did some of the target creations fail?
+      if "rejected" in (p.state() for p in promises)
+        dfd.reject "Failed to create the targets"
+      else
+        # Resolve the promise with the target list
+        dfd.resolve (targets[sel] for sel in selections)
 
     # Return the promise
     dfd.promise()
@@ -796,23 +812,30 @@ class Annotator extends Delegator
   # immadiate - should we show the adder button, or should be proceed
   #             to create the annotation/highlight immediately ?
   #
-  # returns false if the creation of annotations is forbidden at the moment,
-  # true otherwise.
+  # returns a promise, which will be resolved with the creation of the
+  # annotation can proceed, or will be rejected if the creation of
+  # annotations is forbidden at the moment, or there is some other problem.
+  # In this case, the calling code must clear up any constructs built around
+  # the selection.
   onSuccessfulSelection: (event, immediate = false) ->
+    # Prepare the deferred object
+    dfd = Annotator.$.Deferred()
+
     # Check whether we got a proper event
     unless event?
       throw new Error "Called onSuccessfulSelection without an event!"
     unless event.segments?
-      throw "Called onSuccessulSelection with an event with missing segments!"
+      throw new Error "Called onSuccessulSelection with an event with missing segments!"
 
     # Are we allowed to create annotations?
     unless @canAnnotate
       #@Annotator.showNotification "You are already editing an annotation!",
       #  @Annotator.Notification.INFO
-      return false
+      dfd.reject "I can't annotate right now. (Maybe already creating an annotation?)"
+      return dfd.promise()
 
     # Describe the selection with targets
-    this._getTargetsFromSelections(event.segments).then (targets) =>
+    this._getTargetsFromSelections(event.segments).then(((targets) =>
       @selectedTargets = targets
       @selectedData = event.annotationData
 
@@ -820,13 +843,19 @@ class Annotator extends Delegator
       if immediate
         # Create an annotation
         @onAdderClick event
+        dfd.resolve "adder clicked"
       else
         # Show the adder button
         @adder
           .css(util.mousePosition(event, @wrapper[0]))
           .show()
+        dfd.resolve "adder shown"
+    ), ((reason) ->
+      dfd.reject "Looks like I can't annotate these parts. Sorry."
+    ))
 
-    true
+    # Return the promise
+    dfd.promise()
 
   onFailedSelection: (event) ->
     @adder.hide()
@@ -922,6 +951,10 @@ class Annotator extends Delegator
   #
   # Returns nothing.
   onEditAnnotation: (annotation) =>
+    # Don't allow the creation of new annotations, when we are already
+    # editing one.
+    this.disableAnnotating()
+
     offset = @viewer.element.position()
 
     # Update the annotation when the editor is saved

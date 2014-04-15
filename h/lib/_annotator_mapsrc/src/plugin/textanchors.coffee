@@ -17,7 +17,7 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
 
     # React to the enableAnnotation event
     @annotator.subscribe "enableAnnotating", (value) => if value
-      # If annotation is now enable, check if we have a valid selection
+      # If annotation is now enabled, check if we have a valid selection
       setTimeout @checkForEndSelection, 500
 
     null
@@ -92,6 +92,10 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
     # Get the currently selected ranges.
     selectedRanges = @_getSelectedRanges()
 
+    # To work with annotations, we need to have a document access policy.
+    # Usually we already have one by this time, but we have to make sure.
+    @annotator._chooseAccessPolicy()
+
     for range in selectedRanges
       container = range.commonAncestor
       # TODO: what is selection ends inside a different type of highlight?
@@ -110,15 +114,20 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
         event.pageX = pos.x
         event.pageY = pos.y #- window.scrollY
 
+      # Prepare the function to call whenever we are ready with the selection
+      launch = =>
+        @annotator.onSuccessfulSelection(event).fail (reason) =>
+          console.log "You selected something, but", reason
+
       if @annotator.plugins.DomTextMapper
         # If we have a d-t-m, then first prepare it for questions
         @annotator.domMapper.prepare("creatig selectors").then (state) =>
           # Store this data together with the selections
           for s in event.segments
             s.data = dtmState: state
-          @annotator.onSuccessfulSelection event
+          launch()
       else
-        @annotator.onSuccessfulSelection event
+        launch()
     else
       @annotator.onFailedSelection event
 

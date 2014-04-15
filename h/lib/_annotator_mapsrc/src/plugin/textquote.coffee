@@ -25,8 +25,7 @@ class Annotator.Plugin.TextQuote extends Annotator.Plugin
     dfd = @$.Deferred()
 
     unless selection.type is "text range"
-      # Return an empty list. (We can only describe text range.)
-      dfd.resolve []
+      dfd.reject "I can only describe text ranges"
       return dfd.promise()
 
     unless selection.range?

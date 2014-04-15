@@ -84,9 +84,7 @@ class Annotator.Plugin.TextRange extends Annotator.Plugin
     dfd = @$.Deferred()
 
     unless selection.type is "text range"
-      # Resolve the promise with an empty list.
-      # (We can only describe text range.)
-      dfd.resolve []
+      dfd.reject "I can only describe text ranges"
       return dfd.promise()
 
     sr = selection.range.serialize @annotator.wrapper[0]

@@ -119,9 +119,7 @@ class Annotator.Plugin.TextPosition extends Annotator.Plugin
     dfd = @$.Deferred()
 
     unless selection.type is "text range"
-      # Resolve the promise with an empty list.
-      # (We can only describe text range.)
-      dfd.resolve []
+      dfd.reject "I can only describe text ranges"
       return dfd.promise()
 
     # Get a d-t-m ready-state token out from selection data
