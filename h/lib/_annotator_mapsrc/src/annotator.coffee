@@ -435,6 +435,9 @@ class Annotator extends Delegator
     # In order to change this, let's try to anchor this annotation!
     this._anchorAnnotation annotation
 
+    # _anchorAnnotation will return a promise; we just pass it on
+    # as our return value.
+
   # Find the anchor belonging to a given target
   _findAnchorForTarget: (annotation, target) ->
     for anchor in annotation.anchors when anchor.target is target
@@ -829,8 +832,6 @@ class Annotator extends Delegator
 
     # Are we allowed to create annotations?
     unless @canAnnotate
-      #@Annotator.showNotification "You are already editing an annotation!",
-      #  @Annotator.Notification.INFO
       dfd.reject "I can't annotate right now. (Maybe already creating an annotation?)"
       return dfd.promise()
 
