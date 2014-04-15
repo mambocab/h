@@ -80,15 +80,27 @@ class Annotator.Plugin.TextRange extends Annotator.Plugin
 
   # Create a RangeSelector around a range
   _getRangeSelector: (selection) =>
-    return [] unless selection.type is "text range"
+    # Prepare the deferred object
+    dfd = @$.Deferred()
+
+    unless selection.type is "text range"
+      # Resolve the promise with an empty list.
+      # (We can only describe text range.)
+      dfd.resolve []
+      return dfd.promise()
+
     sr = selection.range.serialize @annotator.wrapper[0]
-    [
+    # Resolve the promise with the selector
+    dfd.resolve [
       type: "RangeSelector"
       startContainer: sr.startContainer
       startOffset: sr.startOffset
       endContainer: sr.endContainer
       endOffset: sr.endOffset
     ]
+
+    # Return the promise
+    dfd.promise()
 
   # Create and anchor using the saved Range selector.
   # The quote is verified.
@@ -155,10 +167,6 @@ class Annotator.Plugin.TextRange extends Annotator.Plugin
           startInfo.start, endInfo.end,
           (startInfo.pageIndex ? 0), (endInfo.pageIndex ? 0),
           currentQuote
-
-        console.log "Created anchor:", anchor
-
-
 
     else # No DTM present
       # Determine the current content of the given range directly

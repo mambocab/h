@@ -100,11 +100,7 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
       return if @annotator.isAnnotator(container)
 
     if selectedRanges.length
-      event.segments = []
-      for r in selectedRanges
-        event.segments.push
-          type: "text range"
-          range: r
+      event.segments = ({type: "text range", range: r} for r in selectedRanges)
 
       # Do we have valid page coordinates inside the event
       # which has triggered this function?

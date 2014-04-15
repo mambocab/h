@@ -7,8 +7,6 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
     @$ = Annotator.$
 
     # Do we have the basic text anchors plugin loaded?
-    unless @annotator.plugins.TextAnchors
-      throw "The FuzzyTextAnchors Annotator plugin requires the TextAnchors plugin."
     unless @annotator.plugins.TextPosition
       throw "The FuzzyTextAnchors Annotator plugin requires the TextPosition plugin."
     # Initialize the text matcher library

@@ -737,18 +737,52 @@ class Annotator extends Delegator
     @mouseIsDown = true
 
 
-  # This is called to create a target from a raw selection,
+  # Create a target from a raw selection,
   # using selectors created by the registered selector creators
   _getTargetFromSelection: (selection) =>
-    selectors = []
-    for c in @selectorCreators
-      description = c.describe selection
-      for selector in description
-        selectors.push selector
+    dfd = Annotator.$.Deferred()
 
-    # Create the target
-    source: @getHref()
-    selector: selectors
+    selectors = []
+
+    # Call all selector creators
+    promises = (for c in @selectorCreators
+      c.describe(selection).then (description) ->
+        for selector in description
+          selectors.push selector
+    )
+
+    # Wait for all the descriptors to finish
+    Annotator.$.when(promises...).always =>
+      # Create the target
+      dfd.resolve
+        source: @getHref()
+        selector: selectors
+
+    # Return the promise
+    dfd.promise()
+
+  # Creates a list of targets from a list of raw selections,
+  # using selectors created by the registered selector creators
+  _getTargetsFromSelections: (selections) =>
+    dfd = Annotator.$.Deferred()
+
+    # Prepare a dict to collect the targets for each selection
+    targets = {}
+
+    # Start the creation of the targets for each selection
+    promises = (for selection in selections
+      this._getTargetFromSelection(selection).then (target) ->
+        targets[selection] = target
+    )
+
+    # Wait for all the pieces to finish
+    Annotator.$.when(promises...).always =>
+
+      # Resolve the promise with the target list
+      dfd.resolve (targets[sel] for sel in selections)
+
+    # Return the promise
+    dfd.promise()
 
   # This method is to be called by the mechanisms responsible for
   # triggering annotation (and highlight) creation.
@@ -778,18 +812,19 @@ class Annotator extends Delegator
       return false
 
     # Describe the selection with targets
-    @selectedTargets = (@_getTargetFromSelection s for s in event.segments)
-    @selectedData = event.annotationData
+    this._getTargetsFromSelections(event.segments).then (targets) =>
+      @selectedTargets = targets
+      @selectedData = event.annotationData
 
-    # Do we want immediate annotation?
-    if immediate
-      # Create an annotation
-      @onAdderClick event
-    else
-      # Show the adder button
-      @adder
-        .css(util.mousePosition(event, @wrapper[0]))
-        .show()
+      # Do we want immediate annotation?
+      if immediate
+        # Create an annotation
+        @onAdderClick event
+      else
+        # Show the adder button
+        @adder
+          .css(util.mousePosition(event, @wrapper[0]))
+          .show()
 
     true
 

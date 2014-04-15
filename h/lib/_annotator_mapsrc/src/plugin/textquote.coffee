@@ -1,11 +1,10 @@
 # This plugin defines the TextQuote selector
 class Annotator.Plugin.TextQuote extends Annotator.Plugin
 
-  @Annotator = Annotator
-  @$ = Annotator.$
-
   # Plugin initialization
   pluginInit: ->
+
+    @$ = Annotator.$
 
     # Register the creator for text quote selectors
     @annotator.selectorCreators.push
@@ -22,7 +21,13 @@ class Annotator.Plugin.TextQuote extends Annotator.Plugin
 
   # Create a TextQuoteSelector around a range
   _getTextQuoteSelector: (selection) =>
-    return [] unless selection.type is "text range"
+    # Prepare the deferred object
+    dfd = @$.Deferred()
+
+    unless selection.type is "text range"
+      # Return an empty list. (We can only describe text range.)
+      dfd.resolve []
+      return dfd.promise()
 
     unless selection.range?
       throw new Error "Called getTextQuoteSelector(range) with null range!"
@@ -34,7 +39,8 @@ class Annotator.Plugin.TextQuote extends Annotator.Plugin
     unless rangeEnd?
       throw new Error "Called getTextQuoteSelector(range) on a range with no valid end."
 
-    [
+    # Resolve the promise with the selector
+    dfd.resolve [
       if @annotator.plugins.DomTextMapper
         # Get a d-t-m ready state from the selection
         state = selection.data.dtmState
@@ -58,3 +64,6 @@ class Annotator.Plugin.TextQuote extends Annotator.Plugin
         type: "TextQuoteSelector"
         exact: selection.range.text().trim()
     ]
+
+    # Return the promise
+    dfd.promise()

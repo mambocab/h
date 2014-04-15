@@ -114,8 +114,15 @@ class Annotator.Plugin.TextPosition extends Annotator.Plugin
     @Annotator.TextPositionAnchor = TextPositionAnchor
 
   # Create a TextPositionSelector around a range
-  _getTextPositionSelector: (selection) ->
-    return [] unless selection.type is "text range"
+  _getTextPositionSelector: (selection) =>
+    # Prepare the deferred object
+    dfd = @$.Deferred()
+
+    unless selection.type is "text range"
+      # Resolve the promise with an empty list.
+      # (We can only describe text range.)
+      dfd.resolve []
+      return dfd.promise()
 
     # Get a d-t-m ready-state token out from selection data
     state = selection.data.dtmState
@@ -123,11 +130,15 @@ class Annotator.Plugin.TextPosition extends Annotator.Plugin
     startOffset = (state.getStartInfoForNode selection.range.start).start
     endOffset = (state.getEndInfoForNode selection.range.end).end
 
-    [
+    # Resolve the pormise with the selector
+    dfd.resolve [
       type: "TextPositionSelector"
       start: startOffset
       end: endOffset
     ]
+
+    # Return the promise
+    dfd.promise()
 
 
   # Create an anchor using the saved TextPositionSelector.
