@@ -1,91 +1,3 @@
-# This anchor type stores information about a piece of text,
-# described using start and end character offsets
-class TextPositionAnchor extends Annotator.Anchor
-
-  @Annotator = Annotator
-
-  constructor: (annotator, annotation, target,
-      @start, @end, startPage, endPage,
-      quote, diffHTML, diffCaseOnly) ->
-
-    super annotator, annotation, target,
-      startPage, endPage,
-      quote, diffHTML, diffCaseOnly
-
-    # This pair of offsets is the key information,
-    # upon which this anchor is based upon.
-    unless @start? then throw new Error "start is required!"
-    unless @end? then throw new Error "end is required!"
-
-    #console.log "Created TextPositionAnchor [", start, ":", end, "]"
-
-    @Annotator = TextPositionAnchor.Annotator
-    @$ = @Annotator.$
-
-  # This is how we create a highlight out of this kind of anchor
-  _createHighlight: (page) ->
-
-    # Prepare the deferred object
-    dfd = @$.Deferred()
-
-    # Get the d-t-m in a consistent state
-    @annotator.domMapper.prepare("highlighting").then (s) =>
-      # When the d-t-m is ready, do this
-
-      try
-        # First we create the range from the stored stard and end offsets
-        mappings = s.getMappingsForCharRange @start, @end, [page]
-
-        # Get the wanted range out of the response of DTM
-        realRange = mappings.sections[page].realRange
-
-        # Get a BrowserRange
-        browserRange = new @Annotator.Range.BrowserRange realRange
-
-        # Get a NormalizedRange
-        normedRange = browserRange.normalize @annotator.wrapper[0]
-
-        # Create the highligh
-        hl = new @Annotator.TextHighlight this, page, normedRange
-
-        # Resolve the promise
-        dfd.resolve hl
-
-      catch error
-        # Something went wrong during creating the highlight
-
-        # Reject the promise
-        try
-          dfd.reject
-            message: "Cought exception"
-            error: error
-        catch e2
-          console.log "WTF", e2.stack
-
-    # Return the promise
-    dfd.promise()
-
-  _verify: (reason, data) ->
-    # Prepare the deferred object
-    dfd = @$.Deferred()
-
-    unless reason is "corpus change"
-      dfd.resolve true # We don't care until the corpus has changed
-      return dfd.promise()
-
-    # Prepare d-t-m for action
-    @annotator.domMapper.prepare("verifying an anchor").then (s) =>
-      # Get the current quote
-      corpus = s.getCorpus()
-      content = corpus[ anchor.start ... anchor.end ].trim()
-      currentQuote = @annotator.normalizeString content
-
-      # Compare it with the stored one
-      dfd.resolve (currentQuote is anchor.quote)
-
-    # Return the promise
-    dfd.promise()
-
 class Annotator.Plugin.TextPosition extends Annotator.Plugin
   pluginInit: ->
 
@@ -98,8 +10,8 @@ class Annotator.Plugin.TextPosition extends Annotator.Plugin
 
     # Register the creator for text quote selectors
     @annotator.selectorCreators.push
-      name: "TextPositionSelector"
-      describe: @_getTextPositionSelector
+      name: "TextPosition"
+      describe: @_createTextPositionSelectorFromRange
 
     # Register the position-based anchoring strategy
     @annotator.anchoringStrategies.push
@@ -107,14 +19,11 @@ class Annotator.Plugin.TextPosition extends Annotator.Plugin
       # This can handle document structure changes,
       # but not the content changes.
       name: "position"
-      create: @_createFromPositionSelector
-      verify: @verifyTextAnchor
-
-    # Export this anchor type
-    @Annotator.TextPositionAnchor = TextPositionAnchor
+      create: @_createAnchorFromTextPositionSelector
+      verify: @_verifyPositionAnchor
 
   # Create a TextPositionSelector around a range
-  _getTextPositionSelector: (selection) =>
+  _createTextPositionSelectorFromRange: (selection) =>
     # Prepare the deferred object
     dfd = @$.Deferred()
 
@@ -141,7 +50,7 @@ class Annotator.Plugin.TextPosition extends Annotator.Plugin
 
   # Create an anchor using the saved TextPositionSelector.
   # The quote is verified.
-  _createFromPositionSelector: (annotation, target) =>
+  _createAnchorFromTextPositionSelector: (target) =>
     # Prepare the deferred object
     dfd = @$.Deferred()
 
@@ -162,7 +71,7 @@ class Annotator.Plugin.TextPosition extends Annotator.Plugin
 
       content = s.getCorpus()[ selector.start ... selector.end ].trim()
       currentQuote = @annotator.normalizeString content
-      savedQuote = @annotator.getQuoteForTarget target
+      savedQuote = @annotator.getQuoteForTarget? target
       if savedQuote? and currentQuote isnt savedQuote
         # We have a saved quote, let's compare it to current content
         #console.log "Could not apply position selector" +
@@ -174,10 +83,35 @@ class Annotator.Plugin.TextPosition extends Annotator.Plugin
         return dfd.promise()
 
       # Create a TextPositionAnchor from this data
-      dfd.resolve new TextPositionAnchor @annotator, annotation, target,
-        selector.start, selector.end,
-        (s.getPageIndexForPos selector.start),
-        (s.getPageIndexForPos selector.end),
-        currentQuote
+      dfd.resolve
+        type: "text position"
+        start: selector.start
+        end: selector.end
+        startPage: s.getPageIndexForPos selector.start
+        endPage: s.getPageIndexForPos selector.end
+        quote: currentQuote
 
+    dfd.promise()
+
+  # If there was a corpus change, verify that the text
+  # is still the same.
+  _verifyPositionAnchor: (anchor, reason, data) =>
+    # Prepare the deferred object
+    dfd = @$.Deferred()
+
+    unless reason is "corpus change"
+      dfd.resolve true # We don't care until the corpus has changed
+      return dfd.promise()
+
+    # Prepare d-t-m for action
+    @annotator.domMapper.prepare("verifying an anchor").then (s) =>
+      # Get the current quote
+      corpus = s.getCorpus()
+      content = corpus[ anchor.start ... anchor.end ].trim()
+      currentQuote = @annotator.normalizeString content
+
+      # Compare it with the stored one
+      dfd.resolve (currentQuote is anchor.quote)
+
+    # Return the promise
     dfd.promise()

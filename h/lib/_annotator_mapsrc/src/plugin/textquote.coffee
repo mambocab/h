@@ -8,8 +8,8 @@ class Annotator.Plugin.TextQuote extends Annotator.Plugin
 
     # Register the creator for text quote selectors
     @annotator.selectorCreators.push
-      name: "TextQuoteSelector"
-      describe: @_getTextQuoteSelector
+      name: "TextQuote"
+      describe: @_createTextQuoteSelectorFromRange
 
     # Register function to get quote from this selector
     @annotator.getQuoteForTarget = (target) =>
@@ -20,7 +20,7 @@ class Annotator.Plugin.TextQuote extends Annotator.Plugin
         null
 
   # Create a TextQuoteSelector around a range
-  _getTextQuoteSelector: (selection) =>
+  _createTextQuoteSelectorFromRange: (selection) =>
     # Prepare the deferred object
     dfd = @$.Deferred()
 
@@ -61,7 +61,7 @@ class Annotator.Plugin.TextQuote extends Annotator.Plugin
         # Get the quote directly from the range
 
         type: "TextQuoteSelector"
-        exact: selection.range.text().trim()
+        exact: @annotator.normalizeString selection.range.text().trim()
     ]
 
     # Return the promise

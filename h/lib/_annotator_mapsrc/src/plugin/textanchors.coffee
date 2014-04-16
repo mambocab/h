@@ -3,9 +3,6 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
 
   # Plugin initialization
   pluginInit: ->
-    # We need text highlights
-    unless @annotator.plugins.TextHighlights
-      throw new Error "The TextAnchors Annotator plugin requires the TextHighlights plugin."
 
     @Annotator = Annotator
     @$ = Annotator.$
@@ -21,6 +18,28 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
       setTimeout @checkForEndSelection, 500
 
     null
+
+  # Verifies whether or not a given part of the DOM is supposed
+  # to be annotated. (Parts of the DOM which are part of annotator
+  # itself are not supposed to be annotated.)
+  isThisSupposedToBeAnnotated: (node) ->
+
+    # First, look up the real top container of this node,
+    # because some highlights might be in the way
+
+    goOn = true
+    while goOn
+      goOn = false
+      for h in @annotator.highlighters
+        if h.isInstance?(node)
+          node = h.getIndependentParent node
+          goOn = true
+          break
+
+    # Now that we know which element should we look at, check
+    # if it's part of Annotator
+    not @annotator.isAnnotator node
+
 
 
   # Code used to create annotations around text ranges =====================
@@ -89,45 +108,46 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
     # We don't care about the adder button click
     return if @annotator.inAdderClick
 
-    # Get the currently selected ranges.
-    selectedRanges = @_getSelectedRanges()
-
     # To work with annotations, we need to have a document access policy.
     # Usually we already have one by this time, but we have to make sure.
     @annotator._chooseAccessPolicy()
 
+    # Get the currently selected ranges.
+    selectedRanges = @_getSelectedRanges()
+
+    # Return if nothing is selected
+    unless selectedRanges.length
+      @annotator.onFailedSelection event
+      return
+
+    # Check if it's legal to annotate these parts
     for range in selectedRanges
-      container = range.commonAncestor
-      # TODO: what is selection ends inside a different type of highlight?
-      if @Annotator.TextHighlight.isInstance container
-        container = @Annotator.TextHighlight.getIndependentParent container
-      return if @annotator.isAnnotator(container)
+      unless @isThisSupposedToBeAnnotated range.commonAncestor
+        @annotator.onFailedSelection event
+        return
 
-    if selectedRanges.length
-      event.segments = ({type: "text range", range: r} for r in selectedRanges)
+    # Put the selected segments into the event
+    event.segments = ({type: "text range", range: r} for r in selectedRanges)
 
-      # Do we have valid page coordinates inside the event
-      # which has triggered this function?
-      unless event.pageX
-        # No, we don't. Adding fake coordinates
-        pos = selectedRanges[0].getEndCoords()
-        event.pageX = pos.x
-        event.pageY = pos.y #- window.scrollY
+    # Do we have valid page coordinates inside the event
+    # which has triggered this function?
+    unless event.pageX
+      # No, we don't. Adding fake coordinates
+      pos = selectedRanges[0].getEndCoords()
+      event.pageX = pos.x
+      event.pageY = pos.y #- window.scrollY
 
-      # Prepare the function to call whenever we are ready with the selection
-      launch = =>
-        @annotator.onSuccessfulSelection(event).fail (reason) =>
-          console.log "You selected something, but", reason
+    # Prepare the function to call whenever we are ready with the selection
+    launch = =>
+      @annotator.onSuccessfulSelection(event).fail (reason) =>
+        console.log "You selected something, but", reason
 
-      if @annotator.plugins.DomTextMapper
-        # If we have a d-t-m, then first prepare it for questions
-        @annotator.domMapper.prepare("creatig selectors").then (state) =>
-          # Store this data together with the selections
-          for s in event.segments
-            s.data = dtmState: state
-          launch()
-      else
+    if @annotator.plugins.DomTextMapper
+      # If we have a d-t-m, then first prepare it for questions
+      @annotator.domMapper.prepare("creatig selectors").then (state) =>
+        # Store this data together with the selections
+        for s in event.segments
+          s.data = dtmState: state
         launch()
     else
-      @annotator.onFailedSelection event
-
+      launch()

@@ -3,12 +3,8 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
 
   pluginInit: ->
 
-    @Annotator = Annotator
     @$ = Annotator.$
 
-    # Do we have the basic text anchors plugin loaded?
-    unless @annotator.plugins.TextPosition
-      throw "The FuzzyTextAnchors Annotator plugin requires the TextPosition plugin."
     # Initialize the text matcher library
     @textFinder = new DomTextMatcher()
 
@@ -18,19 +14,19 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
       # This can handle document structure changes,
       # and also content changes.
       name: "two-phase fuzzy"
-      create: @twoPhaseFuzzyMatching
-      verify: @verifyFuzzyTextAnchor
+      create: @_createAnchorWithTwoPhaseFuzzyMatching
+      verify: @_rejectFuzzyTextAnchor
 
     @annotator.anchoringStrategies.push
       # Naive fuzzy text matching strategy. (Using only the quote.)
       # This can handle document structure changes,
       # and also content changes.
       name: "one-phase fuzzy"
-      create: @fuzzyMatching
-      verify: @verifyFuzzyTextAnchor
+      create: @_createAnchorWithFuzzyMatching
+      verify: @_rejectFuzzyTextAnchor
 
   # Verify a text position anchor
-  verifyFuzzyTextAnchor: (anchor, reason, data) =>
+  _rejectFuzzyTextAnchor: (anchor, reason, data) =>
     # Prepare the deferred object
     dfd = @$.Deferred()
 
@@ -46,7 +42,7 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
     # Return the promise
     dfd.promise()
 
-  twoPhaseFuzzyMatching: (annotation, target) =>
+  _createAnchorWithTwoPhaseFuzzyMatching: (target) =>
     # Prepare the deferred object
     dfd = @$.Deferred()
 
@@ -91,19 +87,20 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
 
       # OK, we have everything
       # Create a TextPositionAnchor from this data
-      dfd.resolve new @Annotator.TextPositionAnchor @annotator,
-        annotation, target,
-        match.start, match.end,
-        (s.getPageIndexForPos match.start),
-        (s.getPageIndexForPos match.end),
-        match.found,
-        unless match.exact then match.comparison.diffHTML,
-        unless match.exact then match.exactExceptCase
+      dfd.resolve
+        type: "text position"
+        start: match.start
+        end: match.end
+        startPage: s.getPageIndexForPos match.start
+        endPage: s.getPageIndexForPos match.end
+        quote: match.found
+        diffHTML: unless match.exact then match.comparison.diffHTML
+        diffCaseOnly: unless match.exact then match.exactExceptCase
 
     # Return the promise
     dfd.promise()
 
-  fuzzyMatching: (annotation, target) =>
+  _createAnchorWithFuzzyMatching: (target) =>
     # Prepare the deferred object
     dfd = @$.Deferred()
 
@@ -157,14 +154,16 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
 #        match.end + "]: '" + match.found + "' (exact: " + match.exact + ")"
 
       # OK, we have everything
-      # Create a TextPosutionAnchor from this data
-      dfd.resolve new @Annotator.TextPositionAnchor @annotator, annotation,
-        target,
-        match.start, match.end,
-        (s.getPageIndexForPos match.start),
-        (s.getPageIndexForPos match.end),
-        match.found,
-        unless match.exact then match.comparison.diffHTML,
-        unless match.exact then match.exactExceptCase
+      # Create a TextPositionAnchor from this data
+      dfd.resolve
+        type: "text position"
+        start: match.start
+        end: match.end
+        startPage: s.getPageIndexForPos match.start
+        endPage: s.getPageIndexForPos match.end
+        quote: match.found
+        diffHTML: unless match.exact then match.comparison.diffHTML
+        diffCaseOnly: unless match.exact then match.exactExceptCase
 
+    # Return the promise
     dfd.promise()

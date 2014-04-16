@@ -109,6 +109,7 @@ class Annotator extends Delegator
     @plugins = {}
     @selectorCreators = []
     @anchoringStrategies = []
+    @highlighters = []
 
     # Return early if the annotator is not supported.
     return this unless Annotator.supported()
@@ -233,9 +234,10 @@ class Annotator extends Delegator
   _setupAnchorEvents: ->
     # When annotations are updated
     @on 'annotationUpdated', (annotation) =>
-      # Notify the anchors
+      # Notify the highlights
       for anchor in annotation.anchors or []
-        anchor.annotationUpdated()
+        for index in [anchor.startPage .. anchor.endPage]
+          anchor.highlight[index]?.annotationUpdated()
 
   # Sets up any dynamically calculated CSS for the Annotator.
   #
@@ -333,12 +335,12 @@ class Annotator extends Delegator
 
   # Recursive method to go over the passed list of strategies,
   # and create an anchor with the first one that succeeds.
-  _createAnchorWithStrategies: (annotation, target, strategies, promise) ->
+  _createAnchorWithStrategies: (annotation, target, strategies, promise) =>
 
     # Do we have more strategies to try?
     unless strategies.length
       # No, it's game over
-      promise.reject()
+      promise.reject "no more strateges to try"
       return
 
     # Fetch the next strategy to try
@@ -347,24 +349,76 @@ class Annotator extends Delegator
     # We will do this if this strategy failes
     onFail = (error, boring = false) =>
       #unless boring then console.log "Anchoring strategy",
-      #  "'" + s.name + "'",
-      #  "has failed:",
-      #  error
+      #  "'" + s.name + "'", "has failed:", error
 
       @_createAnchorWithStrategies annotation, target, strategies, promise
 
     try
       # Get a promise from this strategy
       #console.log "Executing strategy '" + s.name + "'..."
-      iteration = s.create annotation, target
+      iteration = s.create target
 
       # Run this strategy
       iteration.then( (anchor) => # This strategy has worked.
         #console.log "Anchoring strategy '" + s.name + "' has succeeded:",
         #  anchor
 
+        unless anchor.startPage? and anchor.endPage? and anchor.quote?
+          console.log "Warning: starategy", "'" + s.name + "'",
+            "has returned an anchor without the mandatory fields.",
+            anchor
+          onFail("internal error")
+
         # Note the name of the successful strategy
         anchor.strategy = s
+
+        # Save some object references
+        anchor.annotator = this
+        anchor.annotation = annotation
+        anchor.target = target
+
+        # Prepare the map for the hlighlights
+        anchor.highlight = {}
+
+        # Write the results of the re-attaching back to the target
+        target.quote = anchor.quote
+
+        # Copy the diff HTML
+        if anchor.diffHTML
+          target.diffHTML = anchor.diffHTML
+        else
+          delete anchor.diffHTML
+
+        # Copy diff case only flag
+        if anchor.diffCaseOnly
+          target.diffCaseOnly = anchor.diffCaseOnly
+        delete
+          anchor.diffCaseOnly
+
+        # Store this anchor for the annotation
+        annotation.anchors.push anchor
+
+        # Update the annotation's anchor status
+
+        # This annotation is no longer an orphan
+        Util.removeFromSet annotation, @orphans
+
+        # Does it have all the wanted anchors?
+        if annotation.anchors.length is annotation.target.length
+          # Great. Not a half-orphan either.
+#          console.log "Created anchor. Annotation", @annotation.id,
+#            "is now fully anchored."
+          Util.removeFromSet annotation, @halfOrphans
+        else
+         # No, some anchors are still missing. A half-orphan, then.
+#         console.log "Created anchor. Annotation", @annotation.id,
+#           "is now a half-orphan."
+          Util.addToSet annotation, @halfOrphans
+
+        # Store the anchor for all involved pages
+        for pageIndex in [anchor.startPage .. anchor.endPage]
+          @anchors[pageIndex] ?= []
+          @anchors[pageIndex].push anchor
 
         # We can now resolve the promise
         promise.resolve anchor
@@ -396,6 +450,130 @@ class Annotator extends Delegator
 
     # Return the promise
     dfd.promise()
+
+  # Create the missing highlights for this anchor, for the given page
+  _realizeAnchor: (anchor, page) ->
+    return if anchor.fullyRealized # If we have everything, go home
+
+    # Collect the pages that are already rendered
+    renderedPages = [anchor.startPage .. anchor.endPage].filter (index) =>
+      @domMapper.isPageMapped index
+
+    # Collect the pages that are already rendered, but not yet anchored
+    pagesTodo = renderedPages.filter (index) -> not anchor.highlight[index]?
+
+    return unless pagesTodo.length # Return if nothing to do
+
+    try
+      created = []
+      promises = []
+
+      # Create the new highlights
+      for page in pagesTodo
+        promises.push p = this._createHighlight anchor, page  # Get a promise
+        p.then (hl) => created.push anchor.highlight[page] = hl
+        p.fail (e) =>
+          console.log "Error while trying to create highlight:",
+            e.message, e.error.stack
+
+      # Wait for all attempts for finish/fail
+      Annotator.$.when(promises...).always =>
+        # Finished creating the highlights
+
+        # Check if everything is rendered now
+        anchor.fullyRealized =
+          (renderedPages.length is anchor.endPage - anchor.startPage + 1) and # all rendered
+          (created.length is pagesTodo.length) # all hilited
+
+        # Announce the creation of the highlights
+        if created.length
+          this.publish 'highlightsCreated', created
+
+    catch error
+      console.log "Internal error:"
+      console.log error.stack
+
+    null
+
+  # Remove the highlights for this anchor from the given set of pages
+  _virtualizeAnchor: (anchor, pageIndex) =>
+    highlight = anchor.highlight[pageIndex]
+
+    return unless highlight? # No highlight for this page
+
+    try
+      highlight.removeFromDocument()
+    catch error
+      console.log "Could not remove HL from page", pageIndex, ":", error.stack
+
+    delete anchor.highlight[pageIndex]
+
+    # Mark this anchor as not fully rendered
+    anchor.fullyRealized = false
+
+    # Announce the removal of the highlight
+    this.publish 'highlightRemoved', highlight
+
+    null
+
+  # Check if this anchor is still valid. If not, remove it.
+  _verifyAnchor: (anchor, reason, data) ->
+    # Create a Deferred object
+    dfd = Annotator.$.Deferred()
+
+    # Do we have a way to verify this anchor?
+    if anchor.strategy.verify # We have a verify function to call.
+      try
+        anchor.strategy.verify(anchor, reason, data).then (valid) =>
+          #console.log "Is", anchor.annotation.id, "still valid?", valid
+          this._removeAnchor anchor unless valid        # Remove the anchor
+          dfd.resolve()                 # Mark this as resolved
+      catch error
+        # The verify method crashed. How lame.
+        console.log "Error while executing anchor's verify method:", error.stack
+        this._removeAnchor anchor     # Remove the anchor
+        dfd.resolve()     # Mark this as resolved
+    else # No verify method specified
+      console.log "Can't verify this anchor, because the",
+        "'" + anchor.strategy.name + "'",
+        "strategy (which was responsible for creating this anchor)"
+        "did not specify a verify function."
+      this._removeAnchor anchor    # Remove the anchor
+      dfd.resolve()     # Mark this as resolved
+
+    # Return the promise
+    dfd.promise()
+
+  # Virtualize and remove an anchor from all involved pages and the annotation
+  _removeAnchor: (anchor) ->
+    # Go over all the pages
+    for index in [anchor.startPage .. anchor.endPage]
+      this._virtualizeAnchor anchor, index
+      anchors = @anchors[index]
+      # Remove the anchor from the list
+      Util.removeFromSet anchor, anchors
+      # Kill the list if it's empty
+      delete @anchors[index] unless anchors.length
+
+    annotation = anchor.annotation
+
+    # Remove the anchor from the list
+    Util.removeFromSet anchor, annotation.anchors
+
+    # Are there any anchors remaining?
+    if annotation.anchors.length
+      # This annotation is a half-orphan now
+#      console.log "Removed anchor, annotation", annotation.id,
+#        "is a half-orphan now."
+      Util.addToSet annotation, @halfOrphans
+    else
+      # This annotation is an orphan now
+#      console.log "Removed anchor, annotation", annotation.id,
+#        "is an orphan now."
+      Util.addToSet annotation, @orphans
+      Util.removeFromSet annotation, @halfOrphans
+
+
 
   # Public: Initialises an annotation either from an object representation or
   # an annotation created with Annotator#createAnnotation(). It finds the
@@ -478,7 +656,7 @@ class Annotator extends Delegator
         annotation.quote[index] = t.quote
 
         # Realizing the anchor
-        anchor.realize()
+        this._realizeAnchor anchor
 
     # The deferred object we will use for timing
     dfd = Annotator.$.Deferred()
@@ -564,7 +742,7 @@ class Annotator extends Delegator
   # Returns deleted annotation.
   deleteAnnotation: (annotation) ->
     if annotation.anchors?                     # If we have anchors,
-      a.remove() for a in annotation.anchors   # remove them
+      this._removeAnchor(a) for a in annotation.anchors   # remove them
 
     # By the time we delete them, every annotation is an orphan,
     # (since we have just deleted all of it's anchors),
@@ -988,6 +1166,65 @@ class Annotator extends Delegator
     # Delete highlight elements.
     this.deleteAnnotation annotation
 
+  # Recursive method to go over the passed list of highlighters
+  # and create a highlight with the first one that succeeds.
+  _createHighlightUsingHighlighters: (anchor, page, highlighters, promise) =>
+
+    # Do we have more highlighters to try?
+    unless highlighters.length
+      # No, it's game over
+      promise.reject "No highlighter that could handle anchor type" +anchor.type
+      return
+
+    # Fetch the next higlighter to try
+    h = highlighters.shift()
+
+    # We will do this if this strategy failes
+    onFail = (error, boring = false) =>
+      unless boring then console.log "Highlighter",
+        "'" + s.name + "'",
+        "has failed:",
+        error
+
+      @_createHighlightUsingHighlighters anchor, page, highlighters, promise
+
+    try
+      # Get a promise from this highlighter
+      #console.log "Trying highlighter '" + h.name + "'..."
+      iteration = h.highlight anchor, page
+
+      # Run this strategy
+      iteration.then( (highlight) => # This strategy has worked.
+        #console.log "Highlighter '" + h.name + "' has succeeded:",
+        #  highlight
+
+        # We can now resolve the promise
+        promise.resolve highlight
+
+      ).fail onFail
+    catch error
+      # The highlighter has thrown an error!
+      console.log "While trying highlighter",
+        "'" + h.name + "':",
+      console.log error.stack
+      onFail "see exception above"
+
+    null
+
+
+  # Create a highlight for an anchor, using one of the registered
+  # highlighting implementations.
+  _createHighlight: (anchor, page) ->
+    # Prepare the deferred object
+    dfd = Annotator.$.Deferred()
+
+    # Start to go over all the highlighters
+    @_createHighlightUsingHighlighters anchor, page,
+      @highlighters.slice(), dfd
+
+    # Return the promise
+    return dfd.promise()
+
   # Collect all the highlights (optionally for a given set of annotations)
   getHighlights: (annotations) ->
     results = []
@@ -1010,13 +1247,17 @@ class Annotator extends Delegator
 
     # Go over all anchors related to this page
     for anchor in @anchors[index] ? []
-      anchor.realize()
+      this._realizeAnchor anchor
+
+    null
 
   # Virtualize anchors on a given page
   _virtualizePage: (index) ->
     # Go over all anchors related to this page
     for anchor in @anchors[index] ? []
-      anchor.virtualize index
+      this._virtualizeAnchor anchor, index
+
+    null
 
   onAnchorMouseover: (event) ->
     #console.log "Mouse over annotations:", event.data.getAnnotations event
@@ -1032,7 +1273,7 @@ class Annotator extends Delegator
 
     for page, anchors of @anchors     # Go over all the pages
       for anchor in anchors.slice()   # and all the anchors
-        promises.push anchor.verify reason, data    # and verify them
+        promises.push this._verifyAnchor anchor, reason, data # verify them
 
     # Wait for all attempts for finish/fail
     Annotator.$.when(promises...).always -> dfd.resolve()
@@ -1124,7 +1365,6 @@ Annotator.util = util
 Annotator.Util = Util
 
 Annotator.Highlight = Highlight
-Annotator.Anchor = Anchor
 
 # Bind gettext helper so plugins can use localisation.
 Annotator._t = _t

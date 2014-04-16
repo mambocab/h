@@ -17,43 +17,6 @@
 #
 # If the TextPosition plugin is loaded, it will create a TextPosition
 # anchor; otherwise it will record a TextRangeAnchor.
-class TextRangeAnchor extends Annotator.Anchor
-
-  @Annotator = Annotator
-
-  constructor: (annotator, annotation, target, @range, quote) ->
-
-    super annotator, annotation, target, 0, 0, quote
-
-    unless @range? then throw new Error "range is required!"
-
-    @Annotator = TextRangeAnchor.Annotator
-    @$ = @Annotator.$
-
-  # This is how we create a highlight out of this kind of anchor
-  _createHighlight: ->
-
-    # Prepare the deferred object
-    dfd = @$.Deferred()
-
-    # Create the highligh
-    hl = new @Annotator.TextHighlight this, 0, @range
-
-    # Resolve the promise
-    dfd.resolve hl
-
-    # Return the promise
-    dfd.promise()
-
-  _verify: ->
-    # Prepare the deferred object
-    dfd = @$.Deferred()
-
-    # Basically, we have no idea
-    dfd.resolve false # we don't trust in text ranges too much
-
-    dfd.promise()
-
 
 # Annotator plugin for creating, and anchoring based on text range
 # selectors
@@ -66,20 +29,18 @@ class Annotator.Plugin.TextRange extends Annotator.Plugin
 
     # Register the creator for range selectors
     @annotator.selectorCreators.push
-      name: "RangeSelector"
-      describe: @_getRangeSelector
+      name: "TextRange"
+      describe: @_createTextRangeSelectorFromRange
 
     # Register our anchoring strategy
     @annotator.anchoringStrategies.push
       # Simple strategy based on DOM Range
       name: "range"
-      create: @_createFromRangeSelector
-
-    # Export the anchor type
-    @Annotator.TextRangeAnchor = TextRangeAnchor
+      create: @_createAnchorFromTextRangeSelector
+      verify: @_invalidateAnchor
 
   # Create a RangeSelector around a range
-  _getRangeSelector: (selection) =>
+  _createTextRangeSelectorFromRange: (selection) =>
     # Prepare the deferred object
     dfd = @$.Deferred()
 
@@ -100,9 +61,9 @@ class Annotator.Plugin.TextRange extends Annotator.Plugin
     # Return the promise
     dfd.promise()
 
-  # Create and anchor using the saved Range selector.
+  # Create an anchor using the saved TextRange selector.
   # The quote is verified.
-  _createFromRangeSelector: (annotation, target) =>
+  _createAnchorFromTextRangeSelector: (target) =>
     # Prepare the deferred object
     dfd = @$.Deferred()
 
@@ -161,10 +122,13 @@ class Annotator.Plugin.TextRange extends Annotator.Plugin
         # Create a TextPositionAnchor from the start and end offsets
         # of this range
         # (to be used with dom-text-mapper)
-        dfd.resolve new @Annotator.TextPositionAnchor @annotator, annotation, target,
-          startInfo.start, endInfo.end,
-          (startInfo.pageIndex ? 0), (endInfo.pageIndex ? 0),
-          currentQuote
+        dfd.resolve
+          type: "text position"
+          start: startInfo.start
+          end: endInfo.end
+          startPage: startInfo.pageIndex ? 0
+          endPage: endInfo.pageIndex ? 0
+          quote: currentQuote
 
     else # No DTM present
       # Determine the current content of the given range directly
@@ -180,7 +144,22 @@ class Annotator.Plugin.TextRange extends Annotator.Plugin
 
       # Create a TextRangeAnchor from this range
       # (to be used whithout dom-text-mapper)
-      dfd.resolve new TextRangeAnchor @annotator, annotation, target,
-        normedRange, currentQuote
+      dfd.resolve
+        type: "text range"
+        range: normedRange
+        quote: currentQuote
+        startPage: 0
+        endPage: 0
 
+    dfd.promise()
+
+  # Don't confirm this anchor
+  _invalidateAnchor: (anchor) =>
+    # Prepare the deferred object
+    dfd = @$.Deferred()
+
+    # Basically, we have no idea
+    dfd.resolve false # we don't trust in text ranges too much
+
+    # Return the promise
     dfd.promise()

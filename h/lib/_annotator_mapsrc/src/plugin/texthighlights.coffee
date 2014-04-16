@@ -5,45 +5,7 @@ class TextHighlight extends Annotator.Highlight
 
   # Save the Annotator class reference, while we have access to it.
   # TODO: Is this really the way to go? How do other plugins do it?
-  @Annotator = Annotator
   @$ = Annotator.$
-  @highlightType = 'TextHighlight'
-
-  # Is this element a text highlight physical anchor ?
-  @isInstance: (element) -> @$(element).hasClass 'annotator-hl'
-
-  # Find the first parent outside this physical anchor
-  @getIndependentParent: (element) ->
-    @$(element).parents(':not([class^=annotator-hl])')[0]
-
-  # List of annotators we have already set up events for
-  @_inited: []
-
-  # Collect the annotations impacted by an event
-  @getAnnotations: (event) ->
-    TextHighlight.$(event.target)
-      .parents('.annotator-hl')
-      .andSelf()
-      .map( -> TextHighlight.$(this).data("annotation"))
-      .toArray()
-
-  # Set up events for this annotator
-  @_init: (annotator) ->
-    return if annotator in @_inited
-
-    annotator.element.delegate ".annotator-hl", "mouseover", this,
-       (event) => annotator.onAnchorMouseover event
-
-    annotator.element.delegate ".annotator-hl", "mouseout", this,
-       (event) => annotator.onAnchorMouseout event
-
-    annotator.element.delegate ".annotator-hl", "mousedown", this,
-       (event) => annotator.onAnchorMousedown event
-
-    annotator.element.delegate ".annotator-hl", "click", this,
-       (event) => annotator.onAnchorClick event
-
-    @_inited.push annotator
 
   # Public: Wraps the DOM Nodes within the provided range with a highlight
   # element of the specified class and returns the highlight Elements.
@@ -68,11 +30,8 @@ class TextHighlight extends Annotator.Highlight
 
   constructor: (anchor, pageIndex, normedRange) ->
     super anchor, pageIndex
-    TextHighlight._init @annotator
 
     @$ = TextHighlight.$
-    @Annotator = TextHighlight.Annotator
-    @highlightType = 'TextHighlight'
 
     # Create a highlights, and link them with the annotation
     @_highlights = @_highlightRange normedRange
@@ -119,7 +78,102 @@ class TextHighlight extends Annotator.Highlight
 
 class Annotator.Plugin.TextHighlights extends Annotator.Plugin
 
+  highlightType: 'TextHighlight'
+
   # Plugin initialization
   pluginInit: ->
-    # Export the text highlight class for other plugins
-    Annotator.TextHighlight = TextHighlight
+
+    @Annotator = Annotator
+    @$ = Annotator.$
+
+    # Register this highlighting implementation
+    @annotator.highlighters.push
+      name: "standard text highlighter"
+      highlight: @_createTextHighlight
+      isInstance: @_isInstance
+      getIndependentParent: @_getIndependentParent
+
+    # Set up events for annotator
+    @annotator.element.delegate ".annotator-hl", "mouseover", this,
+       (event) => @annotator.onAnchorMouseover event
+
+    @annotator.element.delegate ".annotator-hl", "mouseout", this,
+       (event) => @annotator.onAnchorMouseout event
+
+    @annotator.element.delegate ".annotator-hl", "mousedown", this,
+       (event) => @annotator.onAnchorMousedown event
+
+    @annotator.element.delegate ".annotator-hl", "click", this,
+       (event) => @annotator.onAnchorClick event
+
+  # This is the entry point registered with Annotator
+  _createTextHighlight: (anchor, page) =>
+
+    # Prepare the deferred object
+    dfd = @$.Deferred()
+
+    # Check out the anchor type
+    switch anchor.type
+
+      when "text range"
+        # Create the highligh
+        hl = new TextHighlight anchor, page, anchor.range
+
+        # Resolve the promise
+        dfd.resolve hl
+
+      when "text position"
+
+        # Get the d-t-m in a consistent state
+        @annotator.domMapper.prepare("highlighting").then (s) =>
+          # When the d-t-m is ready, do this
+
+          try
+            # First we create the range from the stored stard and end offsets
+            mappings = s.getMappingsForCharRange anchor.start, anchor.end, [page]
+
+            # Get the wanted range out of the response of DTM
+            realRange = mappings.sections[page].realRange
+
+            # Get a BrowserRange
+            browserRange = new @Annotator.Range.BrowserRange realRange
+
+            # Get a NormalizedRange
+            normedRange = browserRange.normalize @annotator.wrapper[0]
+
+            # Create the highligh
+            hl = new TextHighlight anchor, page, normedRange
+
+            # Resolve the promise
+            dfd.resolve hl
+
+          catch error
+            # Something went wrong during creating the highlight
+            # Reject the promise
+            try
+              dfd.reject
+                message: "Cought exception"
+                error: error
+            catch e2
+              console.log "WTF", e2.stack
+
+      else
+        dfd.reject "Can only handle 'text range' and 'text position' anchors"
+
+    # Return the promise
+    dfd.promise()
+
+  # Is this element a text highlight physical anchor ?
+  isInstance: (element) => @$(element).hasClass 'annotator-hl'
+
+  # Find the first parent outside this physical anchor
+  getIndependentParent: (element) =>
+    @$(element).parents(':not([class^=annotator-hl])')[0]
+
+  # Collect the annotations impacted by an event
+  getAnnotations: (event) =>
+    @$(event.target)
+      .parents('.annotator-hl')
+      .andSelf()
+      .map( -> TextHighlight.$(this).data("annotation"))
+      .toArray()
