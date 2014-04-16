@@ -9,16 +9,17 @@ class Annotator.Plugin.TextPosition extends Annotator.Plugin
       throw new Error "The TextPosition Annotator plugin requires the DomTextMapper plugin."
 
     # Register the creator for text quote selectors
-    @annotator.selectorCreators.push
+    @annotator.registerSelectorCreator
       name: "TextPosition"
       describe: @_createTextPositionSelectorFromRange
 
     # Register the position-based anchoring strategy
-    @annotator.anchoringStrategies.push
+    @annotator.registerAnchoringStrategy
       # Position-based strategy. (The quote is verified.)
       # This can handle document structure changes,
       # but not the content changes.
       name: "position"
+      priority: 50
       create: @_createAnchorFromTextPositionSelector
       verify: @_verifyPositionAnchor
 

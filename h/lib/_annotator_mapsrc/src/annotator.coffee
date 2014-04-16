@@ -81,6 +81,28 @@ class Annotator extends Delegator
 
   viewerHideTimer: null
 
+  _selectorCreators: []
+
+  # Register a selector creator. See docs.
+  registerSelectorCreator: (selectorCreator) =>
+    @_selectorCreators.push selectorCreator
+
+  _anchoringStrategies: []
+
+  # Register an anchoring strategy. See docs.
+  registerAnchoringStrategy: (strategy) =>
+    strategy.priority ?= 50
+    @_anchoringStrategies.push strategy
+    @_anchoringStrategies.sort (s1, s2) -> s1.priority > s2.priority
+
+  _highlighters: []
+
+  # Register a highligher implementation. See docs.
+  registerHighlighter: (highlighter) =>
+    highlighter.priority ?= 50
+    @_highlighters.push highlighter
+    @_highlighters.sort (h1, h2) -> h1.priority > h2.priority
+
   # Public: Creates an instance of the Annotator. Requires a DOM Element in
   # which to watch for annotations as well as any options.
   #
@@ -107,9 +129,6 @@ class Annotator extends Delegator
   constructor: (element, options) ->
     super
     @plugins = {}
-    @selectorCreators = []
-    @anchoringStrategies = []
-    @highlighters = []
 
     # Return early if the annotator is not supported.
     return this unless Annotator.supported()
@@ -446,7 +465,7 @@ class Annotator extends Delegator
 
     # Start to go over all the strategies
     @_createAnchorWithStrategies annotation, target,
-      @anchoringStrategies.slice(), dfd
+      @_anchoringStrategies.slice(), dfd
 
     # Return the promise
     dfd.promise()
@@ -926,7 +945,7 @@ class Annotator extends Delegator
     selectors = []
 
     # Call all selector creators
-    promises = (for c in @selectorCreators
+    promises = (for c in @_selectorCreators
       try
         c.describe(selection).then (description) ->
           for selector in description
@@ -1220,7 +1239,7 @@ class Annotator extends Delegator
 
     # Start to go over all the highlighters
     @_createHighlightUsingHighlighters anchor, page,
-      @highlighters.slice(), dfd
+      @_highlighters.slice(), dfd
 
     # Return the promise
     return dfd.promise()

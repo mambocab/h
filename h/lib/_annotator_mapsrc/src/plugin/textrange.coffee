@@ -28,14 +28,15 @@ class Annotator.Plugin.TextRange extends Annotator.Plugin
     @$ = Annotator.$
 
     # Register the creator for range selectors
-    @annotator.selectorCreators.push
+    @annotator.registerSelectorCreator
       name: "TextRange"
       describe: @_createTextRangeSelectorFromRange
 
     # Register our anchoring strategy
-    @annotator.anchoringStrategies.push
+    @annotator.registerAnchoringStrategy
       # Simple strategy based on DOM Range
       name: "range"
+      priority: 25
       create: @_createAnchorFromTextRangeSelector
       verify: @_invalidateAnchor
 

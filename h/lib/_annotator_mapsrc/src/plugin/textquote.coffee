@@ -7,7 +7,7 @@ class Annotator.Plugin.TextQuote extends Annotator.Plugin
     @$ = Annotator.$
 
     # Register the creator for text quote selectors
-    @annotator.selectorCreators.push
+    @annotator.registerSelectorCreator
       name: "TextQuote"
       describe: @_createTextQuoteSelectorFromRange
 

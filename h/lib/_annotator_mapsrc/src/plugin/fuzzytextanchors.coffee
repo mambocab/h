@@ -9,19 +9,21 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
     @textFinder = new DomTextMatcher()
 
     # Register our fuzzy strategies
-    @annotator.anchoringStrategies.push
+    @annotator.registerAnchoringStrategy
       # Two-phased fuzzy text matching strategy. (Using context and quote.)
       # This can handle document structure changes,
       # and also content changes.
       name: "two-phase fuzzy"
+      priority: 60
       create: @_createAnchorWithTwoPhaseFuzzyMatching
       verify: @_rejectFuzzyTextAnchor
 
-    @annotator.anchoringStrategies.push
+    @annotator.registerAnchoringStrategy
       # Naive fuzzy text matching strategy. (Using only the quote.)
       # This can handle document structure changes,
       # and also content changes.
       name: "one-phase fuzzy"
+      priority: 70
       create: @_createAnchorWithFuzzyMatching
       verify: @_rejectFuzzyTextAnchor
 

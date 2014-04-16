@@ -87,7 +87,7 @@ class Annotator.Plugin.TextHighlights extends Annotator.Plugin
     @$ = Annotator.$
 
     # Register this highlighting implementation
-    @annotator.highlighters.push
+    @annotator.registerHighlighter
       name: "standard text highlighter"
       highlight: @_createTextHighlight
       isInstance: @_isInstance
