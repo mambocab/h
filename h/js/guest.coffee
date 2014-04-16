@@ -325,15 +325,15 @@ class Annotator.Guest extends Annotator
       # We need to check for focused annotations
       a for a in annotations when a in this.focusedAnnotations
 
-  onAnchorMouseover: (event) ->
+  onHighlightMouseover: (event) ->
     this.addEmphasis this._getImpactedAnnotations event
 
-  onAnchorMouseout: (event) ->
+  onHighlightMouseout: (event) ->
     this.removeEmphasis this._getImpactedAnnotations event
 
   # When clicking on a highlight in highlighting mode,
   # set @noBack to true to prevent the sidebar from closing
-  onAnchorMousedown: (event) =>
+  onHighlightMousedown: (event) =>
     if this._getImpactedAnnotations(event).length
       @noBack = true
 
@@ -354,7 +354,7 @@ class Annotator.Guest extends Annotator
 
   # When clicking on a highlight in highlighting mode,
   # tell the sidebar to bring up the viewer for the relevant annotations
-  onAnchorClick: (event) =>
+  onHighlightClick: (event) =>
     annotations = this._getImpactedAnnotations event
     return unless annotations.length and @noBack
 
