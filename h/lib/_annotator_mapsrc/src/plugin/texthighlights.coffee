@@ -95,16 +95,16 @@ class Annotator.Plugin.TextHighlights extends Annotator.Plugin
 
     # Set up events for annotator
     @annotator.element.delegate ".annotator-hl", "mouseover", this,
-       (event) => @annotator.onAnchorMouseover event
+       (event) => @annotator.onHighlightMouseover event
 
     @annotator.element.delegate ".annotator-hl", "mouseout", this,
-       (event) => @annotator.onAnchorMouseout event
+       (event) => @annotator.onHighlightMouseout event
 
     @annotator.element.delegate ".annotator-hl", "mousedown", this,
-       (event) => @annotator.onAnchorMousedown event
+       (event) => @annotator.onHighlightMousedown event
 
     @annotator.element.delegate ".annotator-hl", "click", this,
-       (event) => @annotator.onAnchorClick event
+       (event) => @annotator.onHighlightClick event
 
   # This is the entry point registered with Annotator
   _createTextHighlight: (anchor, page) =>

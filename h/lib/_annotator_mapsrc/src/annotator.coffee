@@ -1278,9 +1278,6 @@ class Annotator extends Delegator
 
     null
 
-  onAnchorMouseover: (event) ->
-    #console.log "Mouse over annotations:", event.data.getAnnotations event
-
   # Tell all anchors to verify themselves
   _verifyAllAnchors: (reason = "no reason in particular", data = null) =>
 #    console.log "Verifying all anchors, because of", reason, data
@@ -1315,7 +1312,7 @@ class Annotator extends Delegator
     # Return a promise
     dfd.promise()
 
-  onAnchorMouseover: (event) ->
+  onHighlightMouseover: (event) ->
     #console.log "Mouse over annotations:", event.data.getAnnotations event
 
     # Cancel any pending hiding of the viewer.
@@ -1328,14 +1325,14 @@ class Annotator extends Delegator
     this.showViewer event.data.getAnnotations(event),
       util.mousePosition(event, @wrapper[0])
 
-  onAnchorMouseout: (event) ->
+  onHighlightMouseout: (event) ->
     #console.log "Mouse out on annotations:", event.data.getAnnotations event
     this.startViewerHideTimer()
 
-  onAnchorMousedown: (event) ->
+  onHighlightMousedown: (event) ->
     #console.log "Mouse down on annotations:", event.data.getAnnotations event
 
-  onAnchorClick: (event) ->
+  onHighlightClick: (event) ->
     #console.log "Click on annotations:", event.data.getAnnotations event
     #console.log "(Highlight type: '" + event.data.highlightType + "')"
 
