@@ -3,9 +3,14 @@ class Annotator.Plugin.DomTextMapper extends Annotator.Plugin
 
   pluginInit: ->
 
+    # This plugin is intended to be used with the Enhanced Anchoring architecture.
+    unless @annotator.plugins.EnhancedAnchoring
+      throw new Error "The DomTextMapper Annotator plugin requires the EnhancedAnchoring plugin."
+
     @Annotator = Annotator
 
-    @annotator.documentAccessStrategies.unshift
+    @annotator.registerDocumentAccessStrategy
+
       # Document access strategy for simple HTML documents,
       # with enhanced text extraction and mapping features.
       name: "DOM-Text-Mapper"

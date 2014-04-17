@@ -4,6 +4,10 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
   # Plugin initialization
   pluginInit: ->
 
+    # This plugin is intended to be used with the Enhanced Anchoring architecture.        
+    unless @annotator.plugins.EnhancedAnchoring
+      throw new Error "The TextAnchors Annotator plugin requires the EnhancedAnchoring plugin."        
+
     @Annotator = Annotator
     @$ = Annotator.$
         
@@ -30,7 +34,7 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
     goOn = true
     while goOn
       goOn = false
-      for h in @annotator.highlighters
+      for h in @annotator.anchoring._highlighters
         if h.isInstance?(node)
           node = h.getIndependentParent node
           goOn = true
@@ -108,9 +112,9 @@ class Annotator.Plugin.TextAnchors extends Annotator.Plugin
     # We don't care about the adder button click
     return if @annotator.inAdderClick
 
-    # To work with annotations, we need to have a document access policy.
-    # Usually we already have one by this time, but we have to make sure.
-    @annotator._chooseAccessPolicy()
+    # To work with annotations, we need to set up the anchoring system
+    # Usually we already have one by this time, but we have to make sure.# 
+    @annotator.initAnchoring?()
 
     # Get the currently selected ranges.
     selectedRanges = @_getSelectedRanges()

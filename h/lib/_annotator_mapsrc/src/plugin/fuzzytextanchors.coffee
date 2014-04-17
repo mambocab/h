@@ -3,6 +3,10 @@ class Annotator.Plugin.FuzzyTextAnchors extends Annotator.Plugin
 
   pluginInit: ->
 
+    # This plugin is intended to be used with the Enhanced Anchoring architecture.        
+    unless @annotator.plugins.EnhancedAnchoring
+      throw new Error "The FuzzyTextAnchors Annotator plugin requires the EnhancedAnchoring plugin."
+
     @$ = Annotator.$
 
     # Initialize the text matcher library

@@ -1,8 +1,13 @@
 class Annotator.Plugin.TextPosition extends Annotator.Plugin
+
   pluginInit: ->
 
     @Annotator = Annotator
     @$ = Annotator.$
+
+    # This plugin is intended to be used with the Enhanced Anchoring architecture.        
+    unless @annotator.plugins.EnhancedAnchoring
+      throw new Error "The TextPosition Annotator plugin requires the EnhancedAnchoring plugin."
 
     # Do we have the basic text anchors plugin loaded?
     unless @annotator.plugins.DomTextMapper

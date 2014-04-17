@@ -4,6 +4,10 @@ class Annotator.Plugin.TextQuote extends Annotator.Plugin
   # Plugin initialization
   pluginInit: ->
 
+    # This plugin is intended to be used with the Enhanced Anchoring architecture.        
+    unless @annotator.plugins.EnhancedAnchoring
+      throw new Error "The TextQuote Annotator plugin requires the EnhancedAnchoring plugin."
+
     @$ = Annotator.$
 
     # Register the creator for text quote selectors
