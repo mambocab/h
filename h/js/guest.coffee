@@ -10,6 +10,7 @@ class Annotator.Guest extends Annotator
 
   # Plugin configuration
   options:
+    EnhancedAnchoring: {}
     TextHighlights: {}
     DomTextMapper:
       options:
@@ -93,11 +94,11 @@ class Annotator.Guest extends Annotator
     # This would be done automatically when the annotations
     # are loaded, but we need it sooner, so that the heatmap
     # can work properly.
-    this._chooseAccessPolicy()
+    this.initAnchoring?()
 
     # While we are at it, we trigger an initial scan, too, so that
     # it finishes ASAP
-    this.domMapper.prepare "Initing H"
+    this.domMapper?.prepare "Initing H"
 
   _setupXDM: (options) ->
     # jschannel chokes FF and Chrome extension origins.
@@ -148,8 +149,8 @@ class Annotator.Guest extends Annotator
     )
 
     .bind('adderClick', =>
-      @selectedTargets = @forcedLoginTargets
-      @selectedData = @forcedLoginData
+      @anchoring._selectedTargets = @forcedLoginTargets
+      @anchoring._selectedData = @forcedLoginData
       @onAdderClick @forcedLoginEvent
       delete @forcedLoginTargets
       delete @forcedLoginData
@@ -202,7 +203,7 @@ class Annotator.Guest extends Annotator
     .on 'click', =>
       if @canAnnotate and not @noBack and not @creatingHL
         setTimeout =>
-          unless @selectedTargets?.length
+          unless @anchoring._selectedTargets?.length
             @hideFrame()
       delete @creatingHL
     this
@@ -254,9 +255,9 @@ class Annotator.Guest extends Annotator
       @mouseIsDown = true
 
   confirmSelection: ->
-    return true unless @selectedTargets.length is 1
+    return true unless @anchoring._selectedTargets.length is 1
 
-    quote = this.getQuoteForTarget @selectedTargets[0]
+    quote = this.getQuoteForTarget @anchoring._selectedTargets[0]
 
     if quote.length > 2 then return true
 
@@ -277,8 +278,8 @@ class Annotator.Guest extends Annotator
 
       # Describe the selection with targets
       this._getTargetsFromSelections(event.segments).then (targets) =>
-        @selectedTargets = targets
-        @selectedData = event.annotationData
+        @anchoring._selectedTargets = targets
+        @anchoring._selectedData = event.annotationData
 
         # Do we really want to make this selection?
         unless this.confirmSelection()
@@ -300,9 +301,9 @@ class Annotator.Guest extends Annotator
         annotation = {inject: true}
 
         # If we have saved some data for this annotation, add it here
-        if @selectedData
-          @Annotator.$.extend annotation, @selectedData
-          delete @selectedData
+        if @anchoring._selectedData
+          @Annotator.$.extend annotation, @anchoring._selectedData
+          delete @anchoring._selectedData
 
         this.setupAnnotation(annotation).then =>
 
@@ -383,17 +384,17 @@ class Annotator.Guest extends Annotator
         @element.removeClass markerClass
 
   addComment: ->
-    sel = @selectedTargets   # Save the targets
-    data = @selectedData     # Save any extra data
+    sel = @anchoring._selectedTargets   # Save the targets
+    data = @anchoring._selectedData     # Save any extra data
 
     # Nuke the targets and any extra data, since we won't be using that.
     # We will attach this to the end of the document.
     # Our override for setupAnnotation will add that highlight.
-    @selectedTargets = []
-    delete @selectedData
+    @anchoring._selectedTargets = []
+    delete @anchoring._selectedData
     this.onAdderClick()     # Open editor (with 0 targets)
-    @selectedTargets = sel  # restore the targets
-    @selectedData = data    # restore any extra data
+    @anchoring._selectedTargets = sel  # restore the targets
+    @anchoring._selectedData = data    # restore any extra data
 
   # Is this annotation a comment?
   isComment: (annotation) ->
@@ -431,8 +432,8 @@ class Annotator.Guest extends Annotator
 
     # Save the event and targets for restarting edit on forced login
     @forcedLoginEvent = event
-    @forcedLoginTargets = @selectedTargets
-    @forcedLoginData = @selectedData
+    @forcedLoginTargets = @anchoring._selectedTargets
+    @forcedLoginData = @anchoring._selectedData
 
     # Hide the adder
     @adder.hide()

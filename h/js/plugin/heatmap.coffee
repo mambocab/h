@@ -52,6 +52,10 @@ class Annotator.Plugin.Heatmap extends Annotator.Plugin
       $(element).append @element
 
   pluginInit: ->
+
+    # This plugin is intended to be used with the Enhanced Anchoring architecture.        
+    unless @annotator.plugins.EnhancedAnchoring
+      throw new Error "The Heatmap Annotator plugin requires the EnhancedAnchoring plugin."
     return unless d3?
     this._maybeRebaseUrls()
 

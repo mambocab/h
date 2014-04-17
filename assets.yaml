@@ -91,6 +91,11 @@ annotator_texthighlights:
   output: lib/annotator.texthighlights.min.js
   contents:
     - h:lib/annotator.texthighlights.js
+annotator_enhancedanchoring:
+  filters: uglifyjs
+  output: lib/annotator.enhancedanchoring.min.js
+  contents:
+    - h:lib/annotator.enhancedanchoring.js
 
 # Annotator plugins maintained in tree
 annotator_bridge:
@@ -353,6 +358,7 @@ inject:
     - annotator_bridge
     - annotator_document
     - annotator_heatmap
+    - annotator_enhancedanchoring
     - annotator_fuzzytextanchors
     - annotator_textrange
     - annotator_textposition
