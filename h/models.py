@@ -106,7 +106,7 @@ class Annotation(annotation.Annotation):
         'text': {'type': 'string'},
         'deleted': {'type': 'boolean'},
         'uri': {'type': 'string', 'index': 'not_analyzed'},
-        'user': {'type': 'string', 'index': 'not_analyzed'},
+        'user': {'type': 'string', 'index': 'analyzed', 'search_analyzer': 'keyword', 'index_analyzer': 'user'},
         'consumer': {'type': 'string', 'index': 'not_analyzed'},
         'target': {
             'properties': {
@@ -178,6 +178,10 @@ class Annotation(annotation.Annotation):
             'analyzer': {
                 'thread': {
                     'tokenizer': 'path_hierarchy'
+                },
+                'user': {
+                    'tokenizer': 'keyword',
+                    'filter': 'lowercase'
                 }
             }
         }
