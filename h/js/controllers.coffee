@@ -32,12 +32,12 @@ class App
     ]
 
   this.$inject = [
-    '$element', '$filter', '$http', '$location', '$rootScope', '$scope', '$timeout',
-    'annotator', 'session', 'socket', 'streamfilter', 'viewFilter'
+    '$element', '$location', '$q', '$rootScope', '$scope', '$timeout',
+    'annotator', 'queryparser', 'session', 'socket', 'streamfilter', 'viewFilter'
   ]
   constructor: (
-     $element,   $filter,   $http,   $location,   $rootScope,   $scope,   $timeout
-     annotator,   session,   socket,   streamfilter,   viewFilter
+     $element,   $location,   $q,   $rootScope,   $scope,   $timeout
+     annotator,   queryparser,   session,   socket,   streamfilter,   viewFilter
   ) ->
     {plugins, host, providers} = annotator
 
@@ -241,25 +241,18 @@ class App
       return unless annotator.discardDrafts()
       return unless searchCollection.models.length
 
-      matched = []
-      query =
-        tags: []
-        quote: []
+      models = searchCollection.models
+      entities = Object.keys(plugins.Store?.entities or {})
+      streamfilter.resetFilter().addClause('/uri', 'one_of', entities)
 
-      for item in searchCollection.models
-        {category, value} = item.attributes
+      query = queryparser.populateFilter streamfilter, models
+      filter = streamfilter.getFilter()
 
-        # Stuff we need to collect
-        switch
-          when category in ['text', 'user', 'time', 'group']
-            query[category] = value
-          when category == 'tag'
-            # Tags are specials, because we collect those into an array
-            query.tags.push value.toLowerCase()
-          when category == 'quote'
-            query.quote = query.quote.concat(value.split(/\s+/))
+      session.$promise.then ->
+        $scope.updater.then (sock) ->
+          sock.send(JSON.stringify(filter: filter))
 
-      $location.path('/page_search').search(query)
+      $location.search(query)
 
     $scope.searchClear = ->
       $location.url('/viewer')
@@ -338,23 +331,20 @@ class App
           $element.find('.visual-search').find('input').last().focus()
         , 10
 
-
     $scope.initUpdater = ->
-      filter =
-        streamfilter
-          .setPastDataNone()
-          .setMatchPolicyIncludeAny()
-          .addClause('/uri', 'one_of', Object.keys(annotator.plugins.Store.entities))
-          .getFilter()
+      _dfdSock = $q.defer()
+      _sock = socket()
 
-      $scope.updater = socket()
-      $scope.updater.onopen = ->
-        $scope.updater.send(JSON.stringify({filter}))
+      $scope.updater?.then (sock) -> sock.close()
+      $scope.updater = _dfdSock.promise
 
-      $scope.updater.onclose = =>
-        $timeout $scope.initUpdater, 60000
+      _sock.onopen = ->
+        _dfdSock.resolve(_sock)
 
-      $scope.updater.onmessage = (msg) =>
+      _sock.onclose = ->
+        $scope.initUpdater()
+
+      _sock.onmessage = (msg) ->
         #console.log msg
         unless msg.data.type? and msg.data.type is 'annotation-notification'
           return
@@ -373,20 +363,20 @@ class App
         else
           $scope.applyUpdates action, data
 
-    $scope.markAnnotationUpdate = (data) =>
+    $scope.markAnnotationUpdate = (data) ->
       for annotation in data
         # We need to flag the top level
         if annotation.references?
           container = annotator.threading.getContainer annotation.references[0]
           if container?.message?
             container.message._updatedAnnotation = true
-            # Temporary workarund to force publish changes
-            if annotator.plugins.Store?
-              annotator.plugins.Store._onLoadAnnotations [container.message]
         else
           annotation._updatedAnnotation = true
 
-    $scope.applyUpdates = (action, data) =>
+    $scope.applyUpdates = (action, data) ->
+      if action == 'past'
+        action = 'create'
+
       switch action
         when 'create'
           # XXX: Temporary workaround until solving the race condition for annotationsLoaded event
@@ -396,17 +386,18 @@ class App
 
           $scope.markAnnotationUpdate data
 
-          $scope.$apply =>
-            if annotator.plugins.Store?
-              annotator.plugins.Store._onLoadAnnotations data
-              # XXX: Ugly workaround to update the scope content
-              switch $rootScope.viewState.view
-                when 'Document'
-                  unless annotator.isComment(annotation) or annotation.references?
-                    $rootScope.annotations.push annotation
-                when 'Comments'
-                  if annotator.isComment(annotation)
-                    $rootScope.annotations.push annotation
+          if annotator.plugins.Store?
+            annotator.plugins.Store._onLoadAnnotations data
+            # XXX: Ugly workaround to update the scope content
+            switch $rootScope.viewState.view
+              when 'Document'
+                unless annotator.isComment(annotation) or annotation.references?
+                  $rootScope.annotations.push annotation
+              when 'Comments'
+                if annotator.isComment(annotation)
+                  $rootScope.annotations.push annotation
+              else
+                $rootScope.annotations.push annotation
         when 'update'
           $scope.markAnnotationUpdate data
           annotator.plugins.Store._onLoadAnnotations data
@@ -432,9 +423,8 @@ class App
             method: 'blinkBuckets'
       , 500
 
-    $timeout =>
+    session.$promise.then ->
       $scope.initUpdater()
-    , 5000
 
 class Annotation
   this.$inject = [

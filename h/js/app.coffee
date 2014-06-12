@@ -13,6 +13,7 @@ imports = [
   'h.session'
   'h.services'
   'h.socket'
+  'h.streamsearch'
 ]
 
 
@@ -49,6 +50,10 @@ configure = [
       controller: 'SearchController'
       reloadOnSearch: false
       templateUrl: 'page_search.html'
+    $routeProvider.when '/stream',
+      controller: 'StreamSearchController'
+      reloadOnSearch: false
+      templateUrl: 'viewer.html'
     $routeProvider.otherwise
       redirectTo: '/viewer'
 
